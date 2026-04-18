@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "@tanstack/react-router";
-import { LayoutDashboard, Calendar, Sparkles, Image, Star, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Calendar, Sparkles, Image, Star, LogOut, Menu, X, Car, CalendarX, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,11 @@ const NAV = [
   { to: "/admin", label: "Overzicht", icon: LayoutDashboard, exact: true },
   { to: "/admin/reservaties", label: "Reservaties", icon: Calendar },
   { to: "/admin/diensten", label: "Diensten", icon: Sparkles },
+  { to: "/admin/voertuigen", label: "Voertuigen & prijzen", icon: Car },
+  { to: "/admin/blokkades", label: "Blokkades", icon: CalendarX },
   { to: "/admin/galerij", label: "Galerij", icon: Image },
   { to: "/admin/reviews", label: "Reviews", icon: Star },
+  { to: "/admin/instellingen", label: "Instellingen", icon: Settings },
 ] as const;
 
 export function AdminLayout({ children }: { children?: ReactNode }) {

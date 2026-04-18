@@ -18,10 +18,13 @@ import { Route as AdminLoginRouteImport } from './routes/admin-login'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminVoertuigenRouteImport } from './routes/admin/voertuigen'
 import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
 import { Route as AdminReservatiesRouteImport } from './routes/admin/reservaties'
+import { Route as AdminInstellingenRouteImport } from './routes/admin/instellingen'
 import { Route as AdminGalerijRouteImport } from './routes/admin/galerij'
 import { Route as AdminDienstenRouteImport } from './routes/admin/diensten'
+import { Route as AdminBlokkadesRouteImport } from './routes/admin/blokkades'
 
 const ReservatieRoute = ReservatieRouteImport.update({
   id: '/reservatie',
@@ -68,6 +71,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminVoertuigenRoute = AdminVoertuigenRouteImport.update({
+  id: '/voertuigen',
+  path: '/voertuigen',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminReviewsRoute = AdminReviewsRouteImport.update({
   id: '/reviews',
   path: '/reviews',
@@ -76,6 +84,11 @@ const AdminReviewsRoute = AdminReviewsRouteImport.update({
 const AdminReservatiesRoute = AdminReservatiesRouteImport.update({
   id: '/reservaties',
   path: '/reservaties',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminInstellingenRoute = AdminInstellingenRouteImport.update({
+  id: '/instellingen',
+  path: '/instellingen',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminGalerijRoute = AdminGalerijRouteImport.update({
@@ -88,6 +101,11 @@ const AdminDienstenRoute = AdminDienstenRouteImport.update({
   path: '/diensten',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminBlokkadesRoute = AdminBlokkadesRouteImport.update({
+  id: '/blokkades',
+  path: '/blokkades',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -98,10 +116,13 @@ export interface FileRoutesByFullPath {
   '/galerij': typeof GalerijRoute
   '/over-ons': typeof OverOnsRoute
   '/reservatie': typeof ReservatieRoute
+  '/admin/blokkades': typeof AdminBlokkadesRoute
   '/admin/diensten': typeof AdminDienstenRoute
   '/admin/galerij': typeof AdminGalerijRoute
+  '/admin/instellingen': typeof AdminInstellingenRoute
   '/admin/reservaties': typeof AdminReservatiesRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/voertuigen': typeof AdminVoertuigenRoute
   '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
@@ -112,10 +133,13 @@ export interface FileRoutesByTo {
   '/galerij': typeof GalerijRoute
   '/over-ons': typeof OverOnsRoute
   '/reservatie': typeof ReservatieRoute
+  '/admin/blokkades': typeof AdminBlokkadesRoute
   '/admin/diensten': typeof AdminDienstenRoute
   '/admin/galerij': typeof AdminGalerijRoute
+  '/admin/instellingen': typeof AdminInstellingenRoute
   '/admin/reservaties': typeof AdminReservatiesRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/voertuigen': typeof AdminVoertuigenRoute
   '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
@@ -128,10 +152,13 @@ export interface FileRoutesById {
   '/galerij': typeof GalerijRoute
   '/over-ons': typeof OverOnsRoute
   '/reservatie': typeof ReservatieRoute
+  '/admin/blokkades': typeof AdminBlokkadesRoute
   '/admin/diensten': typeof AdminDienstenRoute
   '/admin/galerij': typeof AdminGalerijRoute
+  '/admin/instellingen': typeof AdminInstellingenRoute
   '/admin/reservaties': typeof AdminReservatiesRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/voertuigen': typeof AdminVoertuigenRoute
   '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
@@ -145,10 +172,13 @@ export interface FileRouteTypes {
     | '/galerij'
     | '/over-ons'
     | '/reservatie'
+    | '/admin/blokkades'
     | '/admin/diensten'
     | '/admin/galerij'
+    | '/admin/instellingen'
     | '/admin/reservaties'
     | '/admin/reviews'
+    | '/admin/voertuigen'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -159,10 +189,13 @@ export interface FileRouteTypes {
     | '/galerij'
     | '/over-ons'
     | '/reservatie'
+    | '/admin/blokkades'
     | '/admin/diensten'
     | '/admin/galerij'
+    | '/admin/instellingen'
     | '/admin/reservaties'
     | '/admin/reviews'
+    | '/admin/voertuigen'
     | '/admin'
   id:
     | '__root__'
@@ -174,10 +207,13 @@ export interface FileRouteTypes {
     | '/galerij'
     | '/over-ons'
     | '/reservatie'
+    | '/admin/blokkades'
     | '/admin/diensten'
     | '/admin/galerij'
+    | '/admin/instellingen'
     | '/admin/reservaties'
     | '/admin/reviews'
+    | '/admin/voertuigen'
     | '/admin/'
   fileRoutesById: FileRoutesById
 }
@@ -257,6 +293,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/voertuigen': {
+      id: '/admin/voertuigen'
+      path: '/voertuigen'
+      fullPath: '/admin/voertuigen'
+      preLoaderRoute: typeof AdminVoertuigenRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/reviews': {
       id: '/admin/reviews'
       path: '/reviews'
@@ -269,6 +312,13 @@ declare module '@tanstack/react-router' {
       path: '/reservaties'
       fullPath: '/admin/reservaties'
       preLoaderRoute: typeof AdminReservatiesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/instellingen': {
+      id: '/admin/instellingen'
+      path: '/instellingen'
+      fullPath: '/admin/instellingen'
+      preLoaderRoute: typeof AdminInstellingenRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/galerij': {
@@ -285,22 +335,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDienstenRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/blokkades': {
+      id: '/admin/blokkades'
+      path: '/blokkades'
+      fullPath: '/admin/blokkades'
+      preLoaderRoute: typeof AdminBlokkadesRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminBlokkadesRoute: typeof AdminBlokkadesRoute
   AdminDienstenRoute: typeof AdminDienstenRoute
   AdminGalerijRoute: typeof AdminGalerijRoute
+  AdminInstellingenRoute: typeof AdminInstellingenRoute
   AdminReservatiesRoute: typeof AdminReservatiesRoute
   AdminReviewsRoute: typeof AdminReviewsRoute
+  AdminVoertuigenRoute: typeof AdminVoertuigenRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminBlokkadesRoute: AdminBlokkadesRoute,
   AdminDienstenRoute: AdminDienstenRoute,
   AdminGalerijRoute: AdminGalerijRoute,
+  AdminInstellingenRoute: AdminInstellingenRoute,
   AdminReservatiesRoute: AdminReservatiesRoute,
   AdminReviewsRoute: AdminReviewsRoute,
+  AdminVoertuigenRoute: AdminVoertuigenRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 
