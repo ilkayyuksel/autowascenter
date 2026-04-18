@@ -23,7 +23,7 @@ export function AdminLayout({ children }: { children?: ReactNode }) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate({ to: "/admin/login" });
+    navigate({ to: "/admin-login" });
   };
 
   return (

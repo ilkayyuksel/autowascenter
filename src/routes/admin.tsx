@@ -23,7 +23,7 @@ function AdminGuard() {
 
   if (!user) {
     // soft client-side redirect
-    if (typeof window !== "undefined") window.location.href = "/admin/login";
+    if (typeof window !== "undefined") window.location.href = "/admin-login";
     return null;
   }
 
