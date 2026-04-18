@@ -72,6 +72,8 @@ export type Database = {
       }
       gallery_items: {
         Row: {
+          before_image_url: string | null
+          category: string | null
           created_at: string
           description: string | null
           id: string
@@ -81,6 +83,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          before_image_url?: string | null
+          category?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -90,6 +94,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          before_image_url?: string | null
+          category?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -133,11 +139,15 @@ export type Database = {
       services: {
         Row: {
           active: boolean
+          badge: string | null
+          bookable: boolean
+          category: string | null
           created_at: string
           description: string | null
           duration_minutes: number | null
           icon: string | null
           id: string
+          image_url: string | null
           price: number | null
           sort_order: number
           title: string
@@ -145,11 +155,15 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          badge?: string | null
+          bookable?: boolean
+          category?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number | null
           icon?: string | null
           id?: string
+          image_url?: string | null
           price?: number | null
           sort_order?: number
           title: string
@@ -157,11 +171,15 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          badge?: string | null
+          bookable?: boolean
+          category?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number | null
           icon?: string | null
           id?: string
+          image_url?: string | null
           price?: number | null
           sort_order?: number
           title?: string
