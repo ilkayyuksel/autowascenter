@@ -1,8 +1,7 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
+import { ShieldAlert } from "lucide-react";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Link } from "@tanstack/react-router";
-import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/admin")({
