@@ -14,51 +14,174 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocked_periods: {
+        Row: {
+          created_at: string
+          end_date: string
+          end_time: string | null
+          id: string
+          reason: string | null
+          start_date: string
+          start_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_date: string
+          start_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_date?: string
+          start_time?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      booking_services: {
+        Row: {
+          booking_id: string
+          created_at: string
+          duration_minutes: number
+          id: string
+          price: number
+          service_id: string | null
+          service_title: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          price?: number
+          service_id?: string | null
+          service_title: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          price?: number
+          service_id?: string | null
+          service_title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_services_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
+          cancel_token: string
+          cancelled_at: string | null
+          company_name: string | null
           created_at: string
           customer_email: string
           customer_name: string
           customer_phone: string
+          end_time: string | null
           id: string
+          location_address: string | null
+          location_distance_km: number | null
+          location_fee: number
+          location_in_sint_niklaas: boolean | null
           notes: string | null
+          on_location: boolean
           preferred_date: string
           preferred_time: string
           service_id: string | null
           service_title: string | null
           status: Database["public"]["Enums"]["booking_status"]
+          total_duration_minutes: number
+          total_price: number
           updated_at: string
+          vat_number: string | null
+          vehicle_brand: string | null
           vehicle_info: string | null
+          vehicle_model: string | null
+          vehicle_type_id: string | null
         }
         Insert: {
+          cancel_token?: string
+          cancelled_at?: string | null
+          company_name?: string | null
           created_at?: string
           customer_email: string
           customer_name: string
           customer_phone: string
+          end_time?: string | null
           id?: string
+          location_address?: string | null
+          location_distance_km?: number | null
+          location_fee?: number
+          location_in_sint_niklaas?: boolean | null
           notes?: string | null
+          on_location?: boolean
           preferred_date: string
           preferred_time: string
           service_id?: string | null
           service_title?: string | null
           status?: Database["public"]["Enums"]["booking_status"]
+          total_duration_minutes?: number
+          total_price?: number
           updated_at?: string
+          vat_number?: string | null
+          vehicle_brand?: string | null
           vehicle_info?: string | null
+          vehicle_model?: string | null
+          vehicle_type_id?: string | null
         }
         Update: {
+          cancel_token?: string
+          cancelled_at?: string | null
+          company_name?: string | null
           created_at?: string
           customer_email?: string
           customer_name?: string
           customer_phone?: string
+          end_time?: string | null
           id?: string
+          location_address?: string | null
+          location_distance_km?: number | null
+          location_fee?: number
+          location_in_sint_niklaas?: boolean | null
           notes?: string | null
+          on_location?: boolean
           preferred_date?: string
           preferred_time?: string
           service_id?: string | null
           service_title?: string | null
           status?: Database["public"]["Enums"]["booking_status"]
+          total_duration_minutes?: number
+          total_price?: number
           updated_at?: string
+          vat_number?: string | null
+          vehicle_brand?: string | null
           vehicle_info?: string | null
+          vehicle_model?: string | null
+          vehicle_type_id?: string | null
         }
         Relationships: [
           {
@@ -66,6 +189,13 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_vehicle_type_id_fkey"
+            columns: ["vehicle_type_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_types"
             referencedColumns: ["id"]
           },
         ]
@@ -187,6 +317,45 @@ export type Database = {
         }
         Relationships: []
       }
+      site_settings: {
+        Row: {
+          base_address: string
+          base_city: string
+          closing_hour: string
+          created_at: string
+          id: string
+          km_fee: number
+          notification_email: string | null
+          opening_hour: string
+          slot_interval_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          base_address?: string
+          base_city?: string
+          closing_hour?: string
+          created_at?: string
+          id?: string
+          km_fee?: number
+          notification_email?: string | null
+          opening_hour?: string
+          slot_interval_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          base_address?: string
+          base_city?: string
+          closing_hour?: string
+          created_at?: string
+          id?: string
+          km_fee?: number
+          notification_email?: string | null
+          opening_hour?: string
+          slot_interval_minutes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -205,6 +374,93 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      vehicle_type_services: {
+        Row: {
+          available: boolean
+          created_at: string
+          duration_minutes: number
+          id: string
+          price: number
+          service_id: string
+          updated_at: string
+          vehicle_type_id: string
+        }
+        Insert: {
+          available?: boolean
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          price?: number
+          service_id: string
+          updated_at?: string
+          vehicle_type_id: string
+        }
+        Update: {
+          available?: boolean
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          price?: number
+          service_id?: string
+          updated_at?: string
+          vehicle_type_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_type_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_type_services_vehicle_type_id_fkey"
+            columns: ["vehicle_type_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_types: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          image_url: string | null
+          slug: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          image_url?: string | null
+          slug: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          image_url?: string | null
+          slug?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
