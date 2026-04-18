@@ -19,28 +19,10 @@ function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
-    if (mode === "signup") {
-      const redirectUrl = `${window.location.origin}/admin`;
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: redirectUrl },
-      });
-      setLoading(false);
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-      toast.success("Account aangemaakt! Vraag aan een admin om je toegang te geven.");
-      return;
-    }
-
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
@@ -63,9 +45,7 @@ function AdminLogin() {
               <ShieldCheck className="h-6 w-6 text-primary-foreground" />
             </div>
             <h1 className="mt-4 text-2xl font-bold">Admin Dashboard</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {mode === "signin" ? "Log in om verder te gaan" : "Maak een nieuw account aan"}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">Log in om verder te gaan</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -91,29 +71,18 @@ function AdminLogin() {
                 required
                 minLength={6}
                 className="mt-1.5"
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete="current-password"
               />
             </div>
             <Button type="submit" disabled={loading} className="w-full bg-gradient-primary h-11">
               <LogIn className="h-4 w-4" />
-              {loading ? "Bezig..." : mode === "signin" ? "Inloggen" : "Account aanmaken"}
+              {loading ? "Bezig..." : "Inloggen"}
             </Button>
           </form>
-
-          <button
-            type="button"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-            className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-primary"
-          >
-            {mode === "signin"
-              ? "Nog geen account? Registreer"
-              : "Al een account? Log in"}
-          </button>
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Eerste account? Na registratie moet een bestaande admin je rol toekennen.
-          Het allereerste account kan via Lovable Cloud handmatig admin gemaakt worden.
+          Alleen toegang voor beheerders. Nieuwe accounts worden enkel intern aangemaakt.
         </p>
       </div>
     </div>
