@@ -18,6 +18,8 @@ type Service = {
   price: number | null;
   duration_minutes: number | null;
   icon: string | null;
+  badge: string | null;
+  bookable: boolean;
 };
 
 export function ServicesPreview() {
@@ -26,11 +28,11 @@ export function ServicesPreview() {
   useEffect(() => {
     supabase
       .from("services")
-      .select("id,title,description,price,duration_minutes,icon")
+      .select("id,title,description,price,duration_minutes,icon,badge,bookable")
       .eq("active", true)
       .order("sort_order")
       .limit(4)
-      .then(({ data }) => data && setServices(data));
+      .then(({ data }) => data && setServices(data as Service[]));
   }, []);
 
   return (
@@ -47,7 +49,7 @@ export function ServicesPreview() {
           </div>
           <Button asChild variant="ghost" className="text-primary hover:text-primary">
             <Link to="/diensten">
-              Alle diensten <ArrowRight className="h-4 w-4" />
+              Alle 15 diensten <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
         </div>
@@ -60,6 +62,11 @@ export function ServicesPreview() {
                 key={s.id}
                 className="group relative rounded-2xl border border-border bg-card p-6 shadow-soft hover:shadow-elegant hover:border-primary/30 transition-all"
               >
+                {s.badge && (
+                  <span className="absolute top-4 right-4 px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">
+                    {s.badge}
+                  </span>
+                )}
                 <div className="h-11 w-11 rounded-xl bg-accent text-primary flex items-center justify-center mb-4 group-hover:bg-gradient-primary group-hover:text-primary-foreground transition-colors">
                   <Icon className="h-5 w-5" />
                 </div>
