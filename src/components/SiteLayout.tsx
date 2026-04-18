@@ -3,6 +3,7 @@ import { Header } from "./Header";
 import { Footer } from "./Footer";
 import { FloatingContactBar } from "./FloatingContactBar";
 import { MobileStickyCTA } from "./MobileStickyCTA";
+import { WalkInNotice } from "./WalkInNotice";
 
 export function SiteLayout({ children }: { children: ReactNode }) {
   return (
@@ -12,6 +13,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <Footer />
       <FloatingContactBar />
       <MobileStickyCTA />
+      <WalkInNotice />
     </div>
   );
 }
