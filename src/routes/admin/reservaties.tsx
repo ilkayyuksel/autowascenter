@@ -168,6 +168,9 @@ function BookingsAdmin() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Button variant="ghost" size="icon" onClick={() => setDetail(b)}>
+                  <Eye className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={() => remove(b.id)} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -233,6 +236,118 @@ function BookingsAdmin() {
           </div>
         ))}
       </div>
+
+      {/* New booking dialog */}
+      <Dialog open={openNew} onOpenChange={setOpenNew}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nieuwe afspraak</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Naam *</Label>
+                <Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
+              </div>
+              <div>
+                <Label>GSM *</Label>
+                <Input value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label>E-mail</Label>
+              <Input type="email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Merk</Label>
+                <Input value={form.vehicle_brand} onChange={(e) => setForm({ ...form, vehicle_brand: e.target.value })} />
+              </div>
+              <div>
+                <Label>Model</Label>
+                <Input value={form.vehicle_model} onChange={(e) => setForm({ ...form, vehicle_model: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label>Dienst(en)</Label>
+              <Input value={form.service_title} onChange={(e) => setForm({ ...form, service_title: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Datum *</Label>
+                <Input type="date" value={form.preferred_date} onChange={(e) => setForm({ ...form, preferred_date: e.target.value })} />
+              </div>
+              <div>
+                <Label>Uur *</Label>
+                <Input type="time" value={form.preferred_time} onChange={(e) => setForm({ ...form, preferred_time: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Duur (min)</Label>
+                <Input type="number" value={form.total_duration_minutes} onChange={(e) => setForm({ ...form, total_duration_minutes: Number(e.target.value) })} />
+              </div>
+              <div>
+                <Label>Prijs (€)</Label>
+                <Input type="number" step="0.01" value={form.total_price} onChange={(e) => setForm({ ...form, total_price: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div>
+              <Label>Notities</Label>
+              <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenNew(false)}>Annuleren</Button>
+            <Button onClick={createBooking} className="bg-gradient-primary">Aanmaken</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail dialog */}
+      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="max-w-lg">
+          {detail && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{detail.customer_name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Datum</div>
+                    <div className="font-medium">{format(new Date(detail.preferred_date), "EEE d MMM yyyy", { locale: nl })}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Uur</div>
+                    <div className="font-medium">{detail.preferred_time}{detail.end_time ? ` – ${detail.end_time}` : ""}</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Dienst</div>
+                  <div className="font-medium">{detail.service_title ?? "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Wagen</div>
+                  <div className="font-medium">
+                    {detail.vehicle_brand || detail.vehicle_model
+                      ? `${detail.vehicle_brand ?? ""} ${detail.vehicle_model ?? ""}`.trim()
+                      : (detail.vehicle_info ?? "—")}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <a href={`tel:${detail.customer_phone}`} className="text-primary hover:underline">{detail.customer_phone}</a>
+                  <a href={`mailto:${detail.customer_email}`} className="text-primary hover:underline truncate">{detail.customer_email}</a>
+                </div>
+                <div className="font-semibold text-lg">€{Number(detail.total_price).toFixed(2)}</div>
+                {detail.notes && (
+                  <div className="p-3 rounded-lg bg-muted text-muted-foreground">{detail.notes}</div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
