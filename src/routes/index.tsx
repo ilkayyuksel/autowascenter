@@ -1,26 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { SiteLayout } from "@/components/SiteLayout";
+import { Hero } from "@/components/Hero";
+import { ServicesPreview } from "@/components/ServicesPreview";
+import { Testimonials } from "@/components/Testimonials";
+import { FAQ } from "@/components/FAQ";
+import { CtaBanner } from "@/components/CtaBanner";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "Autowascenter — Premium Auto Detailing in Sint-Niklaas" },
+      {
+        name: "description",
+        content:
+          "Premium auto detailing in Sint-Niklaas: handwas, interieurreiniging, full detail en keramische coating. Reserveer eenvoudig online.",
+      },
+      { property: "og:title", content: "Autowascenter — Premium Auto Detailing" },
+      { property: "og:description", content: "Vakkundige auto detailing in Sint-Niklaas. Reserveer online." },
+    ],
+  }),
+  component: HomePage,
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
+function HomePage() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <SiteLayout>
+      <Hero />
+      <ServicesPreview />
+      <Testimonials />
+      <CtaBanner />
+      <FAQ />
+    </SiteLayout>
   );
-}
-
-function Index() {
-  return <PlaceholderIndex />;
 }

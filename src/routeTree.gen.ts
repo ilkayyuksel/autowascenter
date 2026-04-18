@@ -9,38 +9,240 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ReservatieRouteImport } from './routes/reservatie'
+import { Route as OverOnsRouteImport } from './routes/over-ons'
+import { Route as GalerijRouteImport } from './routes/galerij'
+import { Route as DienstenRouteImport } from './routes/diensten'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as AdminLoginRouteImport } from './routes/admin-login'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
+import { Route as AdminReservatiesRouteImport } from './routes/admin/reservaties'
+import { Route as AdminGalerijRouteImport } from './routes/admin/galerij'
+import { Route as AdminDienstenRouteImport } from './routes/admin/diensten'
 
+const ReservatieRoute = ReservatieRouteImport.update({
+  id: '/reservatie',
+  path: '/reservatie',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OverOnsRoute = OverOnsRouteImport.update({
+  id: '/over-ons',
+  path: '/over-ons',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalerijRoute = GalerijRouteImport.update({
+  id: '/galerij',
+  path: '/galerij',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DienstenRoute = DienstenRouteImport.update({
+  id: '/diensten',
+  path: '/diensten',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin-login',
+  path: '/admin-login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminReviewsRoute = AdminReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminReservatiesRoute = AdminReservatiesRouteImport.update({
+  id: '/reservaties',
+  path: '/reservaties',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminGalerijRoute = AdminGalerijRouteImport.update({
+  id: '/galerij',
+  path: '/galerij',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDienstenRoute = AdminDienstenRouteImport.update({
+  id: '/diensten',
+  path: '/diensten',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/admin-login': typeof AdminLoginRoute
+  '/contact': typeof ContactRoute
+  '/diensten': typeof DienstenRoute
+  '/galerij': typeof GalerijRoute
+  '/over-ons': typeof OverOnsRoute
+  '/reservatie': typeof ReservatieRoute
+  '/admin/diensten': typeof AdminDienstenRoute
+  '/admin/galerij': typeof AdminGalerijRoute
+  '/admin/reservaties': typeof AdminReservatiesRoute
+  '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin-login': typeof AdminLoginRoute
+  '/contact': typeof ContactRoute
+  '/diensten': typeof DienstenRoute
+  '/galerij': typeof GalerijRoute
+  '/over-ons': typeof OverOnsRoute
+  '/reservatie': typeof ReservatieRoute
+  '/admin/diensten': typeof AdminDienstenRoute
+  '/admin/galerij': typeof AdminGalerijRoute
+  '/admin/reservaties': typeof AdminReservatiesRoute
+  '/admin/reviews': typeof AdminReviewsRoute
+  '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/admin-login': typeof AdminLoginRoute
+  '/contact': typeof ContactRoute
+  '/diensten': typeof DienstenRoute
+  '/galerij': typeof GalerijRoute
+  '/over-ons': typeof OverOnsRoute
+  '/reservatie': typeof ReservatieRoute
+  '/admin/diensten': typeof AdminDienstenRoute
+  '/admin/galerij': typeof AdminGalerijRoute
+  '/admin/reservaties': typeof AdminReservatiesRoute
+  '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/admin-login'
+    | '/contact'
+    | '/diensten'
+    | '/galerij'
+    | '/over-ons'
+    | '/reservatie'
+    | '/admin/diensten'
+    | '/admin/galerij'
+    | '/admin/reservaties'
+    | '/admin/reviews'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/admin-login'
+    | '/contact'
+    | '/diensten'
+    | '/galerij'
+    | '/over-ons'
+    | '/reservatie'
+    | '/admin/diensten'
+    | '/admin/galerij'
+    | '/admin/reservaties'
+    | '/admin/reviews'
+    | '/admin'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/admin-login'
+    | '/contact'
+    | '/diensten'
+    | '/galerij'
+    | '/over-ons'
+    | '/reservatie'
+    | '/admin/diensten'
+    | '/admin/galerij'
+    | '/admin/reservaties'
+    | '/admin/reviews'
+    | '/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  AdminLoginRoute: typeof AdminLoginRoute
+  ContactRoute: typeof ContactRoute
+  DienstenRoute: typeof DienstenRoute
+  GalerijRoute: typeof GalerijRoute
+  OverOnsRoute: typeof OverOnsRoute
+  ReservatieRoute: typeof ReservatieRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reservatie': {
+      id: '/reservatie'
+      path: '/reservatie'
+      fullPath: '/reservatie'
+      preLoaderRoute: typeof ReservatieRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/over-ons': {
+      id: '/over-ons'
+      path: '/over-ons'
+      fullPath: '/over-ons'
+      preLoaderRoute: typeof OverOnsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/galerij': {
+      id: '/galerij'
+      path: '/galerij'
+      fullPath: '/galerij'
+      preLoaderRoute: typeof GalerijRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/diensten': {
+      id: '/diensten'
+      path: '/diensten'
+      fullPath: '/diensten'
+      preLoaderRoute: typeof DienstenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-login': {
+      id: '/admin-login'
+      path: '/admin-login'
+      fullPath: '/admin-login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,21 +250,72 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/reviews': {
+      id: '/admin/reviews'
+      path: '/reviews'
+      fullPath: '/admin/reviews'
+      preLoaderRoute: typeof AdminReviewsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/reservaties': {
+      id: '/admin/reservaties'
+      path: '/reservaties'
+      fullPath: '/admin/reservaties'
+      preLoaderRoute: typeof AdminReservatiesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/galerij': {
+      id: '/admin/galerij'
+      path: '/galerij'
+      fullPath: '/admin/galerij'
+      preLoaderRoute: typeof AdminGalerijRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/diensten': {
+      id: '/admin/diensten'
+      path: '/diensten'
+      fullPath: '/admin/diensten'
+      preLoaderRoute: typeof AdminDienstenRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminDienstenRoute: typeof AdminDienstenRoute
+  AdminGalerijRoute: typeof AdminGalerijRoute
+  AdminReservatiesRoute: typeof AdminReservatiesRoute
+  AdminReviewsRoute: typeof AdminReviewsRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminDienstenRoute: AdminDienstenRoute,
+  AdminGalerijRoute: AdminGalerijRoute,
+  AdminReservatiesRoute: AdminReservatiesRoute,
+  AdminReviewsRoute: AdminReviewsRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
+  AdminLoginRoute: AdminLoginRoute,
+  ContactRoute: ContactRoute,
+  DienstenRoute: DienstenRoute,
+  GalerijRoute: GalerijRoute,
+  OverOnsRoute: OverOnsRoute,
+  ReservatieRoute: ReservatieRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
