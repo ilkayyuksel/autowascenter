@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Phone, Mail, Trash2 } from "lucide-react";
+import { Phone, Mail, Trash2, MapPin, Euro, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,20 @@ type Booking = {
   customer_email: string;
   customer_phone: string;
   vehicle_info: string | null;
+  vehicle_brand: string | null;
+  vehicle_model: string | null;
   service_title: string | null;
   preferred_date: string;
   preferred_time: string;
+  end_time: string | null;
+  total_duration_minutes: number;
+  total_price: number;
+  on_location: boolean;
+  location_in_sint_niklaas: boolean | null;
+  location_address: string | null;
+  location_fee: number;
+  company_name: string | null;
+  vat_number: string | null;
   notes: string | null;
   status: "nieuw" | "bevestigd" | "voltooid" | "geannuleerd";
   created_at: string;
@@ -117,12 +128,30 @@ function BookingsAdmin() {
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
               <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">Dienst</div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Dienst(en)</div>
                 <div className="mt-1 font-medium">{b.service_title ?? "—"}</div>
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">Wagen</div>
-                <div className="mt-1 font-medium">{b.vehicle_info ?? "—"}</div>
+                <div className="mt-1 font-medium">
+                  {b.vehicle_brand || b.vehicle_model
+                    ? `${b.vehicle_brand ?? ""} ${b.vehicle_model ?? ""}`.trim()
+                    : (b.vehicle_info ?? "—")}
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                {b.total_duration_minutes} min
+                {b.end_time && <span className="text-muted-foreground">→ {b.end_time}</span>}
+              </div>
+              <div className="inline-flex items-center gap-2 font-semibold">
+                <Euro className="h-4 w-4 text-muted-foreground" />
+                €{Number(b.total_price ?? 0).toFixed(2)}
+                {b.location_fee > 0 && (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    (+ €{Number(b.location_fee).toFixed(2)} verplaatsing)
+                  </span>
+                )}
               </div>
               <a href={`tel:${b.customer_phone}`} className="flex items-center gap-2 text-foreground hover:text-primary">
                 <Phone className="h-4 w-4" /> {b.customer_phone}
@@ -130,6 +159,22 @@ function BookingsAdmin() {
               <a href={`mailto:${b.customer_email}`} className="flex items-center gap-2 text-foreground hover:text-primary truncate">
                 <Mail className="h-4 w-4 flex-shrink-0" /> <span className="truncate">{b.customer_email}</span>
               </a>
+              {b.on_location && (
+                <div className="sm:col-span-2 inline-flex items-start gap-2 text-foreground">
+                  <MapPin className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                  <span>
+                    Op locatie —{" "}
+                    {b.location_in_sint_niklaas
+                      ? "Sint-Niklaas"
+                      : b.location_address ?? "adres niet opgegeven"}
+                  </span>
+                </div>
+              )}
+              {(b.company_name || b.vat_number) && (
+                <div className="sm:col-span-2 text-xs text-muted-foreground">
+                  {b.company_name} {b.vat_number && `• BTW: ${b.vat_number}`}
+                </div>
+              )}
             </div>
 
             {b.notes && (
