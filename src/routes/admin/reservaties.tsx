@@ -2,10 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Phone, Mail, Trash2, MapPin, Euro, Clock } from "lucide-react";
+import { Phone, Mail, Trash2, MapPin, Euro, Clock, Plus, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -85,10 +91,52 @@ function BookingsAdmin() {
     toast.success("Verwijderd");
   };
 
+  const [openNew, setOpenNew] = useState(false);
+  const [detail, setDetail] = useState<Booking | null>(null);
+  const emptyForm = {
+    customer_name: "", customer_email: "", customer_phone: "",
+    vehicle_brand: "", vehicle_model: "",
+    service_title: "", preferred_date: "", preferred_time: "",
+    total_duration_minutes: 60, total_price: 0, notes: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  const createBooking = async () => {
+    if (!form.customer_name || !form.customer_phone || !form.preferred_date || !form.preferred_time) {
+      return toast.error("Vul minstens naam, gsm, datum en uur in");
+    }
+    const { error } = await supabase.from("bookings").insert({
+      customer_name: form.customer_name,
+      customer_email: form.customer_email || "geen@autowascenter.be",
+      customer_phone: form.customer_phone,
+      vehicle_brand: form.vehicle_brand || null,
+      vehicle_model: form.vehicle_model || null,
+      service_title: form.service_title || null,
+      preferred_date: form.preferred_date,
+      preferred_time: form.preferred_time,
+      total_duration_minutes: form.total_duration_minutes,
+      total_price: form.total_price,
+      notes: form.notes || null,
+      status: "bevestigd",
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Reservatie aangemaakt");
+    setOpenNew(false);
+    setForm(emptyForm);
+    load();
+  };
+
   return (
     <div>
-      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reservaties</h1>
-      <p className="mt-2 text-muted-foreground">Beheer alle binnenkomende afspraken.</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reservaties</h1>
+          <p className="mt-2 text-muted-foreground">Beheer alle binnenkomende afspraken.</p>
+        </div>
+        <Button onClick={() => setOpenNew(true)} className="bg-gradient-primary">
+          <Plus className="h-4 w-4" /> Nieuwe afspraak
+        </Button>
+      </div>
 
       <div className="mt-8 space-y-3">
         {loading && <div className="text-sm text-muted-foreground">Laden...</div>}
