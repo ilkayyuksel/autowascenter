@@ -2,10 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Phone, Mail, Trash2, MapPin, Euro, Clock } from "lucide-react";
+import { Phone, Mail, Trash2, MapPin, Euro, Clock, Plus, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -85,10 +91,52 @@ function BookingsAdmin() {
     toast.success("Verwijderd");
   };
 
+  const [openNew, setOpenNew] = useState(false);
+  const [detail, setDetail] = useState<Booking | null>(null);
+  const emptyForm = {
+    customer_name: "", customer_email: "", customer_phone: "",
+    vehicle_brand: "", vehicle_model: "",
+    service_title: "", preferred_date: "", preferred_time: "",
+    total_duration_minutes: 60, total_price: 0, notes: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  const createBooking = async () => {
+    if (!form.customer_name || !form.customer_phone || !form.preferred_date || !form.preferred_time) {
+      return toast.error("Vul minstens naam, gsm, datum en uur in");
+    }
+    const { error } = await supabase.from("bookings").insert({
+      customer_name: form.customer_name,
+      customer_email: form.customer_email || "geen@autowascenter.be",
+      customer_phone: form.customer_phone,
+      vehicle_brand: form.vehicle_brand || null,
+      vehicle_model: form.vehicle_model || null,
+      service_title: form.service_title || null,
+      preferred_date: form.preferred_date,
+      preferred_time: form.preferred_time,
+      total_duration_minutes: form.total_duration_minutes,
+      total_price: form.total_price,
+      notes: form.notes || null,
+      status: "bevestigd",
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Reservatie aangemaakt");
+    setOpenNew(false);
+    setForm(emptyForm);
+    load();
+  };
+
   return (
     <div>
-      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reservaties</h1>
-      <p className="mt-2 text-muted-foreground">Beheer alle binnenkomende afspraken.</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reservaties</h1>
+          <p className="mt-2 text-muted-foreground">Beheer alle binnenkomende afspraken.</p>
+        </div>
+        <Button onClick={() => setOpenNew(true)} className="bg-gradient-primary">
+          <Plus className="h-4 w-4" /> Nieuwe afspraak
+        </Button>
+      </div>
 
       <div className="mt-8 space-y-3">
         {loading && <div className="text-sm text-muted-foreground">Laden...</div>}
@@ -120,6 +168,9 @@ function BookingsAdmin() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Button variant="ghost" size="icon" onClick={() => setDetail(b)}>
+                  <Eye className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={() => remove(b.id)} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -185,6 +236,118 @@ function BookingsAdmin() {
           </div>
         ))}
       </div>
+
+      {/* New booking dialog */}
+      <Dialog open={openNew} onOpenChange={setOpenNew}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nieuwe afspraak</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Naam *</Label>
+                <Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
+              </div>
+              <div>
+                <Label>GSM *</Label>
+                <Input value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label>E-mail</Label>
+              <Input type="email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Merk</Label>
+                <Input value={form.vehicle_brand} onChange={(e) => setForm({ ...form, vehicle_brand: e.target.value })} />
+              </div>
+              <div>
+                <Label>Model</Label>
+                <Input value={form.vehicle_model} onChange={(e) => setForm({ ...form, vehicle_model: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label>Dienst(en)</Label>
+              <Input value={form.service_title} onChange={(e) => setForm({ ...form, service_title: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Datum *</Label>
+                <Input type="date" value={form.preferred_date} onChange={(e) => setForm({ ...form, preferred_date: e.target.value })} />
+              </div>
+              <div>
+                <Label>Uur *</Label>
+                <Input type="time" value={form.preferred_time} onChange={(e) => setForm({ ...form, preferred_time: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Duur (min)</Label>
+                <Input type="number" value={form.total_duration_minutes} onChange={(e) => setForm({ ...form, total_duration_minutes: Number(e.target.value) })} />
+              </div>
+              <div>
+                <Label>Prijs (€)</Label>
+                <Input type="number" step="0.01" value={form.total_price} onChange={(e) => setForm({ ...form, total_price: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div>
+              <Label>Notities</Label>
+              <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenNew(false)}>Annuleren</Button>
+            <Button onClick={createBooking} className="bg-gradient-primary">Aanmaken</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail dialog */}
+      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="max-w-lg">
+          {detail && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{detail.customer_name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Datum</div>
+                    <div className="font-medium">{format(new Date(detail.preferred_date), "EEE d MMM yyyy", { locale: nl })}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Uur</div>
+                    <div className="font-medium">{detail.preferred_time}{detail.end_time ? ` – ${detail.end_time}` : ""}</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Dienst</div>
+                  <div className="font-medium">{detail.service_title ?? "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Wagen</div>
+                  <div className="font-medium">
+                    {detail.vehicle_brand || detail.vehicle_model
+                      ? `${detail.vehicle_brand ?? ""} ${detail.vehicle_model ?? ""}`.trim()
+                      : (detail.vehicle_info ?? "—")}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <a href={`tel:${detail.customer_phone}`} className="text-primary hover:underline">{detail.customer_phone}</a>
+                  <a href={`mailto:${detail.customer_email}`} className="text-primary hover:underline truncate">{detail.customer_email}</a>
+                </div>
+                <div className="font-semibold text-lg">€{Number(detail.total_price).toFixed(2)}</div>
+                {detail.notes && (
+                  <div className="p-3 rounded-lg bg-muted text-muted-foreground">{detail.notes}</div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

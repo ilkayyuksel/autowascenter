@@ -25,6 +25,7 @@ import { Route as AdminInstellingenRouteImport } from './routes/admin/instelling
 import { Route as AdminGalerijRouteImport } from './routes/admin/galerij'
 import { Route as AdminDienstenRouteImport } from './routes/admin/diensten'
 import { Route as AdminBlokkadesRouteImport } from './routes/admin/blokkades'
+import { Route as AdminAgendaRouteImport } from './routes/admin/agenda'
 
 const ReservatieRoute = ReservatieRouteImport.update({
   id: '/reservatie',
@@ -106,6 +107,11 @@ const AdminBlokkadesRoute = AdminBlokkadesRouteImport.update({
   path: '/blokkades',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAgendaRoute = AdminAgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/galerij': typeof GalerijRoute
   '/over-ons': typeof OverOnsRoute
   '/reservatie': typeof ReservatieRoute
+  '/admin/agenda': typeof AdminAgendaRoute
   '/admin/blokkades': typeof AdminBlokkadesRoute
   '/admin/diensten': typeof AdminDienstenRoute
   '/admin/galerij': typeof AdminGalerijRoute
@@ -133,6 +140,7 @@ export interface FileRoutesByTo {
   '/galerij': typeof GalerijRoute
   '/over-ons': typeof OverOnsRoute
   '/reservatie': typeof ReservatieRoute
+  '/admin/agenda': typeof AdminAgendaRoute
   '/admin/blokkades': typeof AdminBlokkadesRoute
   '/admin/diensten': typeof AdminDienstenRoute
   '/admin/galerij': typeof AdminGalerijRoute
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/galerij': typeof GalerijRoute
   '/over-ons': typeof OverOnsRoute
   '/reservatie': typeof ReservatieRoute
+  '/admin/agenda': typeof AdminAgendaRoute
   '/admin/blokkades': typeof AdminBlokkadesRoute
   '/admin/diensten': typeof AdminDienstenRoute
   '/admin/galerij': typeof AdminGalerijRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/galerij'
     | '/over-ons'
     | '/reservatie'
+    | '/admin/agenda'
     | '/admin/blokkades'
     | '/admin/diensten'
     | '/admin/galerij'
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/galerij'
     | '/over-ons'
     | '/reservatie'
+    | '/admin/agenda'
     | '/admin/blokkades'
     | '/admin/diensten'
     | '/admin/galerij'
@@ -207,6 +218,7 @@ export interface FileRouteTypes {
     | '/galerij'
     | '/over-ons'
     | '/reservatie'
+    | '/admin/agenda'
     | '/admin/blokkades'
     | '/admin/diensten'
     | '/admin/galerij'
@@ -342,10 +354,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminBlokkadesRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/agenda': {
+      id: '/admin/agenda'
+      path: '/agenda'
+      fullPath: '/admin/agenda'
+      preLoaderRoute: typeof AdminAgendaRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminAgendaRoute: typeof AdminAgendaRoute
   AdminBlokkadesRoute: typeof AdminBlokkadesRoute
   AdminDienstenRoute: typeof AdminDienstenRoute
   AdminGalerijRoute: typeof AdminGalerijRoute
@@ -357,6 +377,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAgendaRoute: AdminAgendaRoute,
   AdminBlokkadesRoute: AdminBlokkadesRoute,
   AdminDienstenRoute: AdminDienstenRoute,
   AdminGalerijRoute: AdminGalerijRoute,

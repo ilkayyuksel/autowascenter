@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "@tanstack/react-router";
-import { LayoutDashboard, Calendar, Sparkles, Image, Star, LogOut, Menu, X, Car, CalendarX, Settings } from "lucide-react";
+import { LayoutDashboard, Calendar, CalendarDays, Sparkles, Image, Star, LogOut, Menu, X, Car, CalendarX, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
   { to: "/admin", label: "Overzicht", icon: LayoutDashboard, exact: true },
+  { to: "/admin/agenda", label: "Agenda", icon: CalendarDays },
   { to: "/admin/reservaties", label: "Reservaties", icon: Calendar },
   { to: "/admin/diensten", label: "Diensten", icon: Sparkles },
   { to: "/admin/voertuigen", label: "Voertuigen & prijzen", icon: Car },
