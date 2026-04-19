@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Car, Plus, Trash2, Save } from "lucide-react";
+import { Plus, Trash2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
