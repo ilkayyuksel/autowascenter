@@ -657,8 +657,42 @@ function CreateBookingDialog(props: {
           </div>
 
           <div>
-            <Label>Dienst (omschrijving)</Label>
-            <Input value={form.service_title} onChange={(e) => setForm({ ...form, service_title: e.target.value })} placeholder="bv. Volledige interieurpoets" />
+            <Label>Dienst *</Label>
+            {!form.vehicle_type_id ? (
+              <p className="text-xs text-muted-foreground italic mt-1.5">
+                Kies eerst een voertuigtype om beschikbare diensten te zien.
+              </p>
+            ) : vtServices.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic mt-1.5">
+                Geen diensten beschikbaar voor dit voertuigtype.
+              </p>
+            ) : (
+              <Select
+                value={form.vts_id}
+                onValueChange={(v) => {
+                  const svc = vtServices.find((x) => x.id === v);
+                  if (!svc) return;
+                  setForm((f) => ({
+                    ...f,
+                    vts_id: v,
+                    service_id: svc.service_id,
+                    service_title: svc.title,
+                    duration: svc.duration_minutes,
+                    price: svc.price,
+                  }));
+                  setTime("");
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Kies een dienst" /></SelectTrigger>
+                <SelectContent>
+                  {vtServices.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.title} — €{s.price.toFixed(2)} · {s.duration_minutes} min
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -667,18 +701,13 @@ function CreateBookingDialog(props: {
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} min={format(new Date(), "yyyy-MM-dd")} />
             </div>
             <div>
-              <Label>Duur (min) *</Label>
-              <Select
-                value={String(form.duration)}
-                onValueChange={(v) => setForm({ ...form, duration: Number(v) })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[30, 45, 60, 90, 120, 150, 180, 240, 300].map((m) => (
-                    <SelectItem key={m} value={String(m)}>{m} min</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Duur (min)</Label>
+              <Input
+                value={form.duration}
+                readOnly
+                className="bg-muted"
+                title="Automatisch ingesteld op basis van de gekozen dienst"
+              />
             </div>
           </div>
 
