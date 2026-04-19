@@ -551,6 +551,8 @@ function CreateBookingDialog(props: {
     if (!form.customer_name.trim()) return toast.error("Klantnaam is verplicht");
     if (!form.customer_email.trim()) return toast.error("E-mail is verplicht");
     if (!form.customer_phone.trim()) return toast.error("Telefoon is verplicht");
+    if (!form.vehicle_type_id) return toast.error("Kies een voertuigtype");
+    if (!form.vts_id) return toast.error("Kies een dienst");
     if (!date || !time) return toast.error("Kies een datum en een vrij tijdslot");
 
     setSaving(true);
@@ -572,24 +574,41 @@ function CreateBookingDialog(props: {
 
     const startMin = timeToMinutes(time);
     const endTime = minutesToTime(startMin + form.duration);
-    const { error } = await supabase.from("bookings").insert({
-      customer_name: form.customer_name.trim(),
-      customer_email: form.customer_email.trim(),
-      customer_phone: form.customer_phone.trim(),
-      vehicle_brand: form.vehicle_brand.trim() || null,
-      vehicle_model: form.vehicle_model.trim() || null,
-      service_title: form.service_title.trim() || null,
-      vehicle_type_id: form.vehicle_type_id || null,
-      preferred_date: date,
-      preferred_time: time,
-      end_time: endTime,
-      total_duration_minutes: form.duration,
-      notes: form.notes.trim() || null,
-      status: form.status,
-      total_price: 0,
+    const { data: booking, error } = await supabase
+      .from("bookings")
+      .insert({
+        customer_name: form.customer_name.trim(),
+        customer_email: form.customer_email.trim(),
+        customer_phone: form.customer_phone.trim(),
+        vehicle_brand: form.vehicle_brand.trim() || null,
+        vehicle_model: form.vehicle_model.trim() || null,
+        vehicle_info: `${form.vehicle_brand} ${form.vehicle_model}`.trim() || null,
+        service_id: form.service_id || null,
+        service_title: form.service_title || null,
+        vehicle_type_id: form.vehicle_type_id || null,
+        preferred_date: date,
+        preferred_time: time,
+        end_time: endTime,
+        total_duration_minutes: form.duration,
+        notes: form.notes.trim() || null,
+        status: form.status,
+        total_price: form.price,
+      })
+      .select("id")
+      .single();
+    if (error || !booking) {
+      setSaving(false);
+      return toast.error(error?.message ?? "Kon afspraak niet opslaan");
+    }
+    // Insert booking_services row for consistency with public flow
+    await supabase.from("booking_services").insert({
+      booking_id: booking.id,
+      service_id: form.service_id || null,
+      service_title: form.service_title,
+      price: form.price,
+      duration_minutes: form.duration,
     });
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Afspraak aangemaakt");
     onSaved();
   };
