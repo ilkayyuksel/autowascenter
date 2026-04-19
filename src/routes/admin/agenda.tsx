@@ -80,6 +80,13 @@ type Blocked = {
 };
 
 type VehicleType = { id: string; title: string };
+type VtService = {
+  id: string; // vehicle_type_services.id
+  service_id: string;
+  title: string;
+  price: number;
+  duration_minutes: number;
+};
 
 const STATUS_COLOR: Record<BookingStatus, string> = {
   nieuw:
