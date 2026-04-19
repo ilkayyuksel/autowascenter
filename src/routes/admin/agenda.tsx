@@ -468,8 +468,11 @@ function CreateBookingDialog(props: {
     vehicle_brand: "",
     vehicle_model: "",
     service_title: "",
+    service_id: "" as string | null | "",
+    vts_id: "",
     vehicle_type_id: "",
     duration: 60,
+    price: 0,
     notes: "",
     status: "bevestigd" as BookingStatus,
   });
@@ -479,6 +482,7 @@ function CreateBookingDialog(props: {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [vtServices, setVtServices] = useState<VtService[]>([]);
 
   useEffect(() => {
     supabase
@@ -488,6 +492,37 @@ function CreateBookingDialog(props: {
       .order("sort_order")
       .then(({ data }) => data && setVehicleTypes(data as VehicleType[]));
   }, []);
+
+  // Load services for chosen vehicle type
+  useEffect(() => {
+    if (!form.vehicle_type_id) {
+      setVtServices([]);
+      return;
+    }
+    supabase
+      .from("vehicle_type_services")
+      .select(
+        "id,service_id,price,duration_minutes,available,services!inner(id,title,bookable,active)",
+      )
+      .eq("vehicle_type_id", form.vehicle_type_id)
+      .eq("available", true)
+      .then(({ data }) => {
+        if (!data) return;
+        const opts: VtService[] = (data as any[])
+          .filter((row) => row.services?.bookable && row.services?.active)
+          .map((row) => ({
+            id: row.id,
+            service_id: row.service_id,
+            title: row.services.title,
+            price: Number(row.price),
+            duration_minutes: Number(row.duration_minutes),
+          }))
+          .sort((a, b) => a.title.localeCompare(b.title));
+        setVtServices(opts);
+      });
+    // Reset selected service when vehicle type changes
+    setForm((f) => ({ ...f, vts_id: "", service_id: "", service_title: "" }));
+  }, [form.vehicle_type_id]);
 
   const loadSlots = useCallback(async () => {
     if (!date || !form.duration) {
