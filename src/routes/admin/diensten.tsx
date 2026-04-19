@@ -13,9 +13,10 @@ type Service = {
   id: string;
   title: string;
   description: string | null;
-  price: number | null;
-  duration_minutes: number | null;
   icon: string | null;
+  category: string | null;
+  badge: string | null;
+  bookable: boolean;
   sort_order: number;
   active: boolean;
 };
@@ -48,8 +49,9 @@ function ServicesAdmin() {
 
   const save = async (s: Service) => {
     const { error } = await supabase.from("services").update({
-      title: s.title, description: s.description, price: s.price,
-      duration_minutes: s.duration_minutes, icon: s.icon, sort_order: s.sort_order, active: s.active,
+      title: s.title, description: s.description,
+      icon: s.icon, category: s.category, badge: s.badge,
+      bookable: s.bookable, sort_order: s.sort_order, active: s.active,
     }).eq("id", s.id);
     if (error) return toast.error("Opslaan mislukt");
     toast.success("Opgeslagen");
@@ -70,7 +72,10 @@ function ServicesAdmin() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Diensten</h1>
-          <p className="mt-2 text-muted-foreground">Beheer wat klanten op de site zien.</p>
+          <p className="mt-2 text-muted-foreground">
+            Beheer wat klanten op de site zien. Prijs en duur stel je per voertuigtype in onder
+            <span className="font-medium text-foreground"> Voertuigen & prijzen</span>.
+          </p>
         </div>
         <Button onClick={addNew} className="bg-gradient-primary"><Plus className="h-4 w-4" /> Nieuwe dienst</Button>
       </div>
@@ -98,21 +103,25 @@ function ServicesAdmin() {
                 <Textarea rows={2} value={s.description ?? ""} onChange={(e) => update(s.id, { description: e.target.value })} className="mt-1.5" />
               </div>
               <div>
-                <Label>Prijs (€)</Label>
-                <Input type="number" step="0.01" value={s.price ?? ""} onChange={(e) => update(s.id, { price: e.target.value === "" ? null : Number(e.target.value) })} className="mt-1.5" />
+                <Label>Categorie</Label>
+                <Input value={s.category ?? ""} placeholder="bv. Exterieur, Interieur" onChange={(e) => update(s.id, { category: e.target.value })} className="mt-1.5" />
               </div>
               <div>
-                <Label>Duur (minuten)</Label>
-                <Input type="number" value={s.duration_minutes ?? ""} onChange={(e) => update(s.id, { duration_minutes: e.target.value === "" ? null : Number(e.target.value) })} className="mt-1.5" />
+                <Label>Badge (optioneel)</Label>
+                <Input value={s.badge ?? ""} placeholder="bv. Populair" onChange={(e) => update(s.id, { badge: e.target.value })} className="mt-1.5" />
               </div>
               <div>
                 <Label>Volgorde</Label>
                 <Input type="number" value={s.sort_order} onChange={(e) => update(s.id, { sort_order: Number(e.target.value) })} className="mt-1.5" />
               </div>
-              <div className="flex items-end gap-3">
+              <div className="flex items-end gap-4">
                 <div className="flex items-center gap-2">
                   <Switch checked={s.active} onCheckedChange={(v) => update(s.id, { active: v })} />
                   <Label>Actief op site</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={s.bookable} onCheckedChange={(v) => update(s.id, { bookable: v })} />
+                  <Label>Online boekbaar</Label>
                 </div>
               </div>
             </div>
