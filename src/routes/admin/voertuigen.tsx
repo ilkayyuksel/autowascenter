@@ -216,7 +216,8 @@ function AdminVehiclesPage() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
