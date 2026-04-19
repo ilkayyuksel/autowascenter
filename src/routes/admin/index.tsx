@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Sparkles, Image, Star, Euro, TrendingUp, Clock, ArrowRight } from "lucide-react";
+import { Calendar, Sparkles, Euro, TrendingUp, Clock, ArrowRight, Image as ImageIcon } from "lucide-react";
 import { addDays, format, startOfWeek, isSameDay } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,7 +20,7 @@ type Booking = {
 };
 
 function AdminHome() {
-  const [stats, setStats] = useState({ services: 0, gallery: 0, reviewsPending: 0 });
+  const [stats, setStats] = useState({ services: 0, gallery: 0, vehicles: 0 });
   const [weekBookings, setWeekBookings] = useState<Booking[]>([]);
 
   const weekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
@@ -30,10 +30,10 @@ function AdminHome() {
     (async () => {
       const fromStr = format(weekStart, "yyyy-MM-dd");
       const toStr = format(weekEnd, "yyyy-MM-dd");
-      const [s, g, rp, wb] = await Promise.all([
+      const [s, g, vh, wb] = await Promise.all([
         supabase.from("services").select("id", { count: "exact", head: true }).eq("active", true),
         supabase.from("gallery_items").select("id", { count: "exact", head: true }),
-        supabase.from("reviews").select("id", { count: "exact", head: true }).eq("approved", false),
+        supabase.from("vehicle_types").select("id", { count: "exact", head: true }).eq("active", true),
         supabase
           .from("bookings")
           .select("id,customer_name,service_title,preferred_date,preferred_time,total_price,status")
@@ -46,7 +46,7 @@ function AdminHome() {
       setStats({
         services: s.count ?? 0,
         gallery: g.count ?? 0,
-        reviewsPending: rp.count ?? 0,
+        vehicles: vh.count ?? 0,
       });
       setWeekBookings((wb.data as Booking[]) ?? []);
     })();
@@ -74,8 +74,8 @@ function AdminHome() {
   const cards = [
     { label: "Afspraken deze week", value: weekBookings.length, sub: `${todayBookings.length} vandaag`, icon: Calendar, accent: "text-primary" },
     { label: "Omzet deze week", value: `€${weekRevenue.toFixed(0)}`, sub: "geboekt", icon: Euro, accent: "text-[oklch(0.55_0.17_155)]" },
-    { label: "Diensten actief", value: stats.services, sub: `${stats.gallery} galerij items`, icon: Sparkles, accent: "text-primary" },
-    { label: "Reviews wachtend", value: stats.reviewsPending, sub: "te modereren", icon: Star, accent: "text-amber-500" },
+    { label: "Diensten actief", value: stats.services, sub: "online zichtbaar", icon: Sparkles, accent: "text-primary" },
+    { label: "Galerij items", value: stats.gallery, sub: `${stats.vehicles} voertuigtypes`, icon: ImageIcon, accent: "text-amber-500" },
   ];
 
   return (
