@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { computeAvailableSlots } from "@/lib/slots";
 
 export const Route = createFileRoute("/reservatie")({
   head: () => ({
@@ -252,42 +253,18 @@ function BookingPage() {
   const totalPrice = totalServicesPrice + locationFee;
   const selectedVehicleType = vehicleTypes.find((v) => v.id === vehicleTypeId);
 
-  // Available time slots for the chosen date
-  const availableSlots = useMemo(() => {
-    if (!date || totalDuration === 0) return [];
-    const open = timeToMinutes(settings.opening_hour);
-    const close = timeToMinutes(settings.closing_hour);
-    const interval = settings.slot_interval_minutes;
-    const slots: string[] = [];
-
-    // Build busy intervals from bookings + blocked periods
-    const busy: Array<[number, number]> = [];
-    for (const b of bookings) {
-      const start = timeToMinutes(b.preferred_time);
-      busy.push([start, start + b.total_duration_minutes]);
-    }
-    for (const bp of blocked) {
-      if (date >= bp.start_date && date <= bp.end_date) {
-        const s = bp.start_time ? timeToMinutes(bp.start_time) : 0;
-        const e = bp.end_time ? timeToMinutes(bp.end_time) : 24 * 60;
-        busy.push([s, e]);
-      }
-    }
-
-    // If today, no past slots
-    const todayStr = new Date().toISOString().split("T")[0];
-    const nowMin = date === todayStr
-      ? new Date().getHours() * 60 + new Date().getMinutes()
-      : -1;
-
-    for (let t = open; t + totalDuration <= close; t += interval) {
-      if (t <= nowMin) continue;
-      const slotEnd = t + totalDuration;
-      const overlaps = busy.some(([bs, be]) => t < be && slotEnd > bs);
-      if (!overlaps) slots.push(minutesToTime(t));
-    }
-    return slots;
-  }, [date, totalDuration, bookings, blocked, settings]);
+  // Available time slots — uses shared computation (single source of truth)
+  const availableSlots = useMemo(
+    () =>
+      computeAvailableSlots({
+        date,
+        durationMinutes: totalDuration,
+        bookings,
+        blocked,
+        settings,
+      }),
+    [date, totalDuration, bookings, blocked, settings],
+  );
 
   // Step navigation guards
   const canNext = () => {
