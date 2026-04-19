@@ -15,6 +15,7 @@ import {
   Clock,
   Euro,
 } from "lucide-react";
+import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { toast } from "sonner";
 import { SiteLayout } from "@/components/SiteLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -477,32 +478,36 @@ function BookingPage() {
                       Selecteer het type dat het best bij uw wagen past.
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {vehicleTypes.map((v) => (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => setVehicleTypeId(v.id)}
-                          className={`text-left p-4 rounded-2xl border-2 transition-all min-h-[120px] flex flex-col ${
-                            vehicleTypeId === v.id
-                              ? "border-primary bg-accent shadow-elegant"
-                              : "border-border hover:border-primary/40"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`h-10 w-10 rounded-xl flex items-center justify-center ${
-                                vehicleTypeId === v.id ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                              }`}
-                            >
-                              <Car className="h-5 w-5" />
+                      {vehicleTypes.map((v) => {
+                        const VIcon = getVehicleIcon(v.slug);
+                        const selected = vehicleTypeId === v.id;
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => setVehicleTypeId(v.id)}
+                            className={`text-left p-4 rounded-2xl border-2 transition-all min-h-[120px] flex flex-col ${
+                              selected
+                                ? "border-primary bg-accent shadow-elegant"
+                                : "border-border hover:border-primary/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`h-12 w-12 rounded-xl flex items-center justify-center ${
+                                  selected ? "bg-primary text-primary-foreground" : "bg-muted text-primary"
+                                }`}
+                              >
+                                <VIcon className="h-6 w-6" strokeWidth={1.75} />
+                              </div>
+                              <div className="font-semibold">{v.title}</div>
                             </div>
-                            <div className="font-semibold">{v.title}</div>
-                          </div>
-                          {v.description && (
-                            <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{v.description}</p>
-                          )}
-                        </button>
-                      ))}
+                            {v.description && (
+                              <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{v.description}</p>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

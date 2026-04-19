@@ -22,8 +22,6 @@ type Service = {
   id: string;
   title: string;
   description: string | null;
-  price: number | null;
-  duration_minutes: number | null;
   icon: string | null;
   category: string | null;
   badge: string | null;
@@ -50,7 +48,7 @@ function ServicesPage() {
   useEffect(() => {
     supabase
       .from("services")
-      .select("id,title,description,price,duration_minutes,icon,category,badge,bookable,image_url")
+      .select("id,title,description,icon,category,badge,bookable,image_url")
       .eq("active", true)
       .order("sort_order")
       .then(({ data }) => data && setServices(data as Service[]));
@@ -145,15 +143,6 @@ function ServicesPage() {
                     )}
                     <h2 className="mt-1 text-lg font-bold">{s.title}</h2>
                     <p className="mt-2 text-sm text-muted-foreground leading-relaxed flex-1">{s.description}</p>
-
-                    <div className="mt-4 flex items-baseline justify-between pt-4 border-t border-border">
-                      {s.price != null ? (
-                        <span className="text-xl font-bold">€{Number(s.price).toFixed(0)}</span>
-                      ) : <span />}
-                      {s.duration_minutes != null && (
-                        <span className="text-xs text-muted-foreground">± {s.duration_minutes} min</span>
-                      )}
-                    </div>
 
                     {s.bookable ? (
                       <Button asChild className="mt-4 bg-gradient-primary w-full">

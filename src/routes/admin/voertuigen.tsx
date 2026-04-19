@@ -1,10 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Car, Plus, Trash2, Save } from "lucide-react";
-import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { AdminLayout } from "@/components/admin/AdminLayout";
+import { Plus, Trash2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,7 +36,6 @@ type Vts = {
 };
 
 function AdminVehiclesPage() {
-  const { isAdmin, loading } = useAdminAuth();
   const [vts, setVts] = useState<Vts[]>([]);
   const [vehicles, setVehicles] = useState<VehicleType[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -55,11 +53,8 @@ function AdminVehiclesPage() {
   };
 
   useEffect(() => {
-    if (isAdmin) refresh();
-  }, [isAdmin]);
-
-  if (loading) return <AdminLayout><p>Laden...</p></AdminLayout>;
-  if (!isAdmin) return <AdminLayout><p>Geen toegang</p></AdminLayout>;
+    refresh();
+  }, []);
 
   const addVehicle = async () => {
     const slug = `nieuw-${Date.now()}`;
@@ -116,7 +111,7 @@ function AdminVehiclesPage() {
   const currentVts = vts.filter((v) => v.vehicle_type_id === selectedVehicle);
 
   return (
-    <AdminLayout>
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Voertuigtypes & prijzen</h1>
         <Button onClick={addVehicle} className="bg-gradient-primary">
@@ -125,11 +120,13 @@ function AdminVehiclesPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {vehicles.map((v) => (
+        {vehicles.map((v) => {
+          const VIcon = getVehicleIcon(v.slug);
+          return (
           <div key={v.id} className="rounded-2xl border border-border bg-card p-5 space-y-3">
             <div className="flex items-start gap-3">
               <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
-                <Car className="h-5 w-5 text-primary" />
+                <VIcon className="h-5 w-5 text-primary" strokeWidth={1.75} />
               </div>
               <div className="flex-1 space-y-2">
                 <Input
@@ -219,8 +216,9 @@ function AdminVehiclesPage() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
-    </AdminLayout>
+    </div>
   );
 }

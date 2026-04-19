@@ -19,7 +19,6 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminVoertuigenRouteImport } from './routes/admin/voertuigen'
-import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
 import { Route as AdminReservatiesRouteImport } from './routes/admin/reservaties'
 import { Route as AdminInstellingenRouteImport } from './routes/admin/instellingen'
 import { Route as AdminGalerijRouteImport } from './routes/admin/galerij'
@@ -77,11 +76,6 @@ const AdminVoertuigenRoute = AdminVoertuigenRouteImport.update({
   path: '/voertuigen',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminReviewsRoute = AdminReviewsRouteImport.update({
-  id: '/reviews',
-  path: '/reviews',
-  getParentRoute: () => AdminRoute,
-} as any)
 const AdminReservatiesRoute = AdminReservatiesRouteImport.update({
   id: '/reservaties',
   path: '/reservaties',
@@ -128,7 +122,6 @@ export interface FileRoutesByFullPath {
   '/admin/galerij': typeof AdminGalerijRoute
   '/admin/instellingen': typeof AdminInstellingenRoute
   '/admin/reservaties': typeof AdminReservatiesRoute
-  '/admin/reviews': typeof AdminReviewsRoute
   '/admin/voertuigen': typeof AdminVoertuigenRoute
   '/admin/': typeof AdminIndexRoute
 }
@@ -146,7 +139,6 @@ export interface FileRoutesByTo {
   '/admin/galerij': typeof AdminGalerijRoute
   '/admin/instellingen': typeof AdminInstellingenRoute
   '/admin/reservaties': typeof AdminReservatiesRoute
-  '/admin/reviews': typeof AdminReviewsRoute
   '/admin/voertuigen': typeof AdminVoertuigenRoute
   '/admin': typeof AdminIndexRoute
 }
@@ -166,7 +158,6 @@ export interface FileRoutesById {
   '/admin/galerij': typeof AdminGalerijRoute
   '/admin/instellingen': typeof AdminInstellingenRoute
   '/admin/reservaties': typeof AdminReservatiesRoute
-  '/admin/reviews': typeof AdminReviewsRoute
   '/admin/voertuigen': typeof AdminVoertuigenRoute
   '/admin/': typeof AdminIndexRoute
 }
@@ -187,7 +178,6 @@ export interface FileRouteTypes {
     | '/admin/galerij'
     | '/admin/instellingen'
     | '/admin/reservaties'
-    | '/admin/reviews'
     | '/admin/voertuigen'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
@@ -205,7 +195,6 @@ export interface FileRouteTypes {
     | '/admin/galerij'
     | '/admin/instellingen'
     | '/admin/reservaties'
-    | '/admin/reviews'
     | '/admin/voertuigen'
     | '/admin'
   id:
@@ -224,7 +213,6 @@ export interface FileRouteTypes {
     | '/admin/galerij'
     | '/admin/instellingen'
     | '/admin/reservaties'
-    | '/admin/reviews'
     | '/admin/voertuigen'
     | '/admin/'
   fileRoutesById: FileRoutesById
@@ -312,13 +300,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminVoertuigenRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/reviews': {
-      id: '/admin/reviews'
-      path: '/reviews'
-      fullPath: '/admin/reviews'
-      preLoaderRoute: typeof AdminReviewsRouteImport
-      parentRoute: typeof AdminRoute
-    }
     '/admin/reservaties': {
       id: '/admin/reservaties'
       path: '/reservaties'
@@ -371,7 +352,6 @@ interface AdminRouteChildren {
   AdminGalerijRoute: typeof AdminGalerijRoute
   AdminInstellingenRoute: typeof AdminInstellingenRoute
   AdminReservatiesRoute: typeof AdminReservatiesRoute
-  AdminReviewsRoute: typeof AdminReviewsRoute
   AdminVoertuigenRoute: typeof AdminVoertuigenRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
@@ -383,7 +363,6 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminGalerijRoute: AdminGalerijRoute,
   AdminInstellingenRoute: AdminInstellingenRoute,
   AdminReservatiesRoute: AdminReservatiesRoute,
-  AdminReviewsRoute: AdminReviewsRoute,
   AdminVoertuigenRoute: AdminVoertuigenRoute,
   AdminIndexRoute: AdminIndexRoute,
 }

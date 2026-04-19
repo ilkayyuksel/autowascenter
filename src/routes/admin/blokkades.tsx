@@ -2,8 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, CalendarX } from "lucide-react";
-import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { AdminLayout } from "@/components/admin/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +21,6 @@ type BlockedPeriod = {
 };
 
 function AdminBlockedPage() {
-  const { isAdmin, loading } = useAdminAuth();
   const [periods, setPeriods] = useState<BlockedPeriod[]>([]);
   const [form, setForm] = useState({
     start_date: "",
@@ -42,11 +39,8 @@ function AdminBlockedPage() {
   };
 
   useEffect(() => {
-    if (isAdmin) refresh();
-  }, [isAdmin]);
-
-  if (loading) return <AdminLayout><p>Laden...</p></AdminLayout>;
-  if (!isAdmin) return <AdminLayout><p>Geen toegang</p></AdminLayout>;
+    refresh();
+  }, []);
 
   const add = async () => {
     if (!form.start_date || !form.end_date) {
@@ -73,7 +67,7 @@ function AdminBlockedPage() {
   };
 
   return (
-    <AdminLayout>
+    <div>
       <h1 className="text-2xl font-bold mb-6">Geblokkeerde periodes</h1>
 
       <div className="rounded-2xl border border-border bg-card p-5 mb-6">
@@ -128,6 +122,6 @@ function AdminBlockedPage() {
           ))
         )}
       </div>
-    </AdminLayout>
+    </div>
   );
 }
