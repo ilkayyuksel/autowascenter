@@ -80,6 +80,13 @@ type Blocked = {
 };
 
 type VehicleType = { id: string; title: string };
+type VtService = {
+  id: string; // vehicle_type_services.id
+  service_id: string;
+  title: string;
+  price: number;
+  duration_minutes: number;
+};
 
 const STATUS_COLOR: Record<BookingStatus, string> = {
   nieuw:
@@ -461,8 +468,11 @@ function CreateBookingDialog(props: {
     vehicle_brand: "",
     vehicle_model: "",
     service_title: "",
+    service_id: "" as string | null | "",
+    vts_id: "",
     vehicle_type_id: "",
     duration: 60,
+    price: 0,
     notes: "",
     status: "bevestigd" as BookingStatus,
   });
@@ -472,6 +482,7 @@ function CreateBookingDialog(props: {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [vtServices, setVtServices] = useState<VtService[]>([]);
 
   useEffect(() => {
     supabase
@@ -481,6 +492,37 @@ function CreateBookingDialog(props: {
       .order("sort_order")
       .then(({ data }) => data && setVehicleTypes(data as VehicleType[]));
   }, []);
+
+  // Load services for chosen vehicle type
+  useEffect(() => {
+    if (!form.vehicle_type_id) {
+      setVtServices([]);
+      return;
+    }
+    supabase
+      .from("vehicle_type_services")
+      .select(
+        "id,service_id,price,duration_minutes,available,services!inner(id,title,bookable,active)",
+      )
+      .eq("vehicle_type_id", form.vehicle_type_id)
+      .eq("available", true)
+      .then(({ data }) => {
+        if (!data) return;
+        const opts: VtService[] = (data as any[])
+          .filter((row) => row.services?.bookable && row.services?.active)
+          .map((row) => ({
+            id: row.id,
+            service_id: row.service_id,
+            title: row.services.title,
+            price: Number(row.price),
+            duration_minutes: Number(row.duration_minutes),
+          }))
+          .sort((a, b) => a.title.localeCompare(b.title));
+        setVtServices(opts);
+      });
+    // Reset selected service when vehicle type changes
+    setForm((f) => ({ ...f, vts_id: "", service_id: "", service_title: "" }));
+  }, [form.vehicle_type_id]);
 
   const loadSlots = useCallback(async () => {
     if (!date || !form.duration) {
@@ -509,6 +551,8 @@ function CreateBookingDialog(props: {
     if (!form.customer_name.trim()) return toast.error("Klantnaam is verplicht");
     if (!form.customer_email.trim()) return toast.error("E-mail is verplicht");
     if (!form.customer_phone.trim()) return toast.error("Telefoon is verplicht");
+    if (!form.vehicle_type_id) return toast.error("Kies een voertuigtype");
+    if (!form.vts_id) return toast.error("Kies een dienst");
     if (!date || !time) return toast.error("Kies een datum en een vrij tijdslot");
 
     setSaving(true);
@@ -530,24 +574,41 @@ function CreateBookingDialog(props: {
 
     const startMin = timeToMinutes(time);
     const endTime = minutesToTime(startMin + form.duration);
-    const { error } = await supabase.from("bookings").insert({
-      customer_name: form.customer_name.trim(),
-      customer_email: form.customer_email.trim(),
-      customer_phone: form.customer_phone.trim(),
-      vehicle_brand: form.vehicle_brand.trim() || null,
-      vehicle_model: form.vehicle_model.trim() || null,
-      service_title: form.service_title.trim() || null,
-      vehicle_type_id: form.vehicle_type_id || null,
-      preferred_date: date,
-      preferred_time: time,
-      end_time: endTime,
-      total_duration_minutes: form.duration,
-      notes: form.notes.trim() || null,
-      status: form.status,
-      total_price: 0,
+    const { data: booking, error } = await supabase
+      .from("bookings")
+      .insert({
+        customer_name: form.customer_name.trim(),
+        customer_email: form.customer_email.trim(),
+        customer_phone: form.customer_phone.trim(),
+        vehicle_brand: form.vehicle_brand.trim() || null,
+        vehicle_model: form.vehicle_model.trim() || null,
+        vehicle_info: `${form.vehicle_brand} ${form.vehicle_model}`.trim() || null,
+        service_id: form.service_id || null,
+        service_title: form.service_title || null,
+        vehicle_type_id: form.vehicle_type_id || null,
+        preferred_date: date,
+        preferred_time: time,
+        end_time: endTime,
+        total_duration_minutes: form.duration,
+        notes: form.notes.trim() || null,
+        status: form.status,
+        total_price: form.price,
+      })
+      .select("id")
+      .single();
+    if (error || !booking) {
+      setSaving(false);
+      return toast.error(error?.message ?? "Kon afspraak niet opslaan");
+    }
+    // Insert booking_services row for consistency with public flow
+    await supabase.from("booking_services").insert({
+      booking_id: booking.id,
+      service_id: form.service_id || null,
+      service_title: form.service_title,
+      price: form.price,
+      duration_minutes: form.duration,
     });
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Afspraak aangemaakt");
     onSaved();
   };
@@ -615,8 +676,42 @@ function CreateBookingDialog(props: {
           </div>
 
           <div>
-            <Label>Dienst (omschrijving)</Label>
-            <Input value={form.service_title} onChange={(e) => setForm({ ...form, service_title: e.target.value })} placeholder="bv. Volledige interieurpoets" />
+            <Label>Dienst *</Label>
+            {!form.vehicle_type_id ? (
+              <p className="text-xs text-muted-foreground italic mt-1.5">
+                Kies eerst een voertuigtype om beschikbare diensten te zien.
+              </p>
+            ) : vtServices.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic mt-1.5">
+                Geen diensten beschikbaar voor dit voertuigtype.
+              </p>
+            ) : (
+              <Select
+                value={form.vts_id}
+                onValueChange={(v) => {
+                  const svc = vtServices.find((x) => x.id === v);
+                  if (!svc) return;
+                  setForm((f) => ({
+                    ...f,
+                    vts_id: v,
+                    service_id: svc.service_id,
+                    service_title: svc.title,
+                    duration: svc.duration_minutes,
+                    price: svc.price,
+                  }));
+                  setTime("");
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Kies een dienst" /></SelectTrigger>
+                <SelectContent>
+                  {vtServices.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.title} — €{s.price.toFixed(2)} · {s.duration_minutes} min
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -625,18 +720,13 @@ function CreateBookingDialog(props: {
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} min={format(new Date(), "yyyy-MM-dd")} />
             </div>
             <div>
-              <Label>Duur (min) *</Label>
-              <Select
-                value={String(form.duration)}
-                onValueChange={(v) => setForm({ ...form, duration: Number(v) })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[30, 45, 60, 90, 120, 150, 180, 240, 300].map((m) => (
-                    <SelectItem key={m} value={String(m)}>{m} min</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Duur (min)</Label>
+              <Input
+                value={form.duration}
+                readOnly
+                className="bg-muted"
+                title="Automatisch ingesteld op basis van de gekozen dienst"
+              />
             </div>
           </div>
 

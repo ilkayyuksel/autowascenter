@@ -7,7 +7,7 @@ export function Logo({ className = "" }: { className?: string }) {
       <img
         src={logoImg}
         alt="Autowascenter Sint-Niklaas"
-        className="h-10 sm:h-11 w-auto transition-transform group-hover:scale-[1.02]"
+        className="h-14 sm:h-16 w-auto transition-transform group-hover:scale-[1.02]"
       />
     </Link>
   );

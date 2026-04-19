@@ -13,7 +13,6 @@ import {
   MapPin,
   Car,
   Clock,
-  Euro,
 } from "lucide-react";
 import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { toast } from "sonner";
@@ -408,41 +407,40 @@ function BookingPage() {
             <>
               {/* Progress */}
               <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  {STEPS.map((s, i) => (
-                    <div key={s.id} className="flex items-center flex-1">
-                      <div
-                        className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                          step > s.id
-                            ? "bg-primary text-primary-foreground"
-                            : step === s.id
-                              ? "bg-primary text-primary-foreground shadow-elegant scale-110"
-                              : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {step > s.id ? <Check className="h-4 w-4" /> : s.id}
-                      </div>
-                      {i < STEPS.length - 1 && (
-                        <div className={`h-0.5 flex-1 mx-2 transition-colors ${step > s.id ? "bg-primary" : "bg-muted"}`} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-[10px] sm:text-xs">
-                  {STEPS.map((s) => (
-                    <span
-                      key={s.id}
-                      className={step >= s.id ? "text-foreground font-semibold" : "text-muted-foreground"}
-                    >
-                      {s.label}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-3 h-1 bg-muted rounded-full overflow-hidden">
+                <div className="relative">
+                  {/* Connecting track */}
+                  <div className="absolute top-4 left-0 right-0 h-0.5 bg-muted -z-0" style={{ marginLeft: `${100 / STEPS.length / 2}%`, marginRight: `${100 / STEPS.length / 2}%` }} />
                   <div
-                    className="h-full bg-gradient-primary transition-all duration-500"
-                    style={{ width: `${progress}%` }}
+                    className="absolute top-4 h-0.5 bg-primary transition-all duration-500 -z-0"
+                    style={{
+                      left: `${100 / STEPS.length / 2}%`,
+                      width: `${((step - 1) / (STEPS.length - 1)) * (100 - (100 / STEPS.length))}%`,
+                    }}
                   />
+                  <div className="relative grid" style={{ gridTemplateColumns: `repeat(${STEPS.length}, 1fr)` }}>
+                    {STEPS.map((s) => (
+                      <div key={s.id} className="flex flex-col items-center gap-2">
+                        <div
+                          className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all bg-background ring-2 ${
+                            step > s.id
+                              ? "bg-primary text-primary-foreground ring-primary"
+                              : step === s.id
+                                ? "bg-primary text-primary-foreground ring-primary shadow-elegant scale-110"
+                                : "bg-muted text-muted-foreground ring-muted"
+                          }`}
+                        >
+                          {step > s.id ? <Check className="h-4 w-4" /> : s.id}
+                        </div>
+                        <span
+                          className={`text-[10px] sm:text-xs text-center leading-tight ${
+                            step >= s.id ? "text-foreground font-semibold" : "text-muted-foreground"
+                          }`}
+                        >
+                          {s.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -535,9 +533,7 @@ function BookingPage() {
                                   <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{s.description}</p>
                                 )}
                                 <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                                  <span className="inline-flex items-center gap-1">
-                                    <Euro className="h-3 w-3" /> €{s.price.toFixed(2)}
-                                  </span>
+                                  <span className="font-semibold text-foreground">€{s.price.toFixed(2)}</span>
                                   <span className="inline-flex items-center gap-1">
                                     <Clock className="h-3 w-3" /> {s.duration_minutes} min
                                   </span>
