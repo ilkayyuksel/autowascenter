@@ -2,8 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Car, Plus, Trash2, Save } from "lucide-react";
-import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { AdminLayout } from "@/components/admin/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +35,6 @@ type Vts = {
 };
 
 function AdminVehiclesPage() {
-  const { isAdmin, loading } = useAdminAuth();
   const [vts, setVts] = useState<Vts[]>([]);
   const [vehicles, setVehicles] = useState<VehicleType[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -55,11 +52,8 @@ function AdminVehiclesPage() {
   };
 
   useEffect(() => {
-    if (isAdmin) refresh();
-  }, [isAdmin]);
-
-  if (loading) return <AdminLayout><p>Laden...</p></AdminLayout>;
-  if (!isAdmin) return <AdminLayout><p>Geen toegang</p></AdminLayout>;
+    refresh();
+  }, []);
 
   const addVehicle = async () => {
     const slug = `nieuw-${Date.now()}`;
@@ -116,7 +110,7 @@ function AdminVehiclesPage() {
   const currentVts = vts.filter((v) => v.vehicle_type_id === selectedVehicle);
 
   return (
-    <AdminLayout>
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Voertuigtypes & prijzen</h1>
         <Button onClick={addVehicle} className="bg-gradient-primary">
@@ -221,6 +215,6 @@ function AdminVehiclesPage() {
           </div>
         ))}
       </div>
-    </AdminLayout>
+    </div>
   );
 }

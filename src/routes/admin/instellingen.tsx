@@ -2,8 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Save, Settings as SettingsIcon } from "lucide-react";
-import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { AdminLayout } from "@/components/admin/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,20 +23,15 @@ type Settings = {
 };
 
 function AdminSettingsPage() {
-  const { isAdmin, loading } = useAdminAuth();
   const [settings, setSettings] = useState<Settings | null>(null);
 
   useEffect(() => {
-    if (isAdmin) {
-      supabase.from("site_settings").select("*").limit(1).single().then(({ data }) => {
-        if (data) setSettings(data as Settings);
-      });
-    }
-  }, [isAdmin]);
+    supabase.from("site_settings").select("*").limit(1).single().then(({ data }) => {
+      if (data) setSettings(data as Settings);
+    });
+  }, []);
 
-  if (loading) return <AdminLayout><p>Laden...</p></AdminLayout>;
-  if (!isAdmin) return <AdminLayout><p>Geen toegang</p></AdminLayout>;
-  if (!settings) return <AdminLayout><p>Laden...</p></AdminLayout>;
+  if (!settings) return <p className="text-muted-foreground">Laden...</p>;
 
   const save = async () => {
     const { error } = await supabase
@@ -58,7 +51,7 @@ function AdminSettingsPage() {
   };
 
   return (
-    <AdminLayout>
+    <div>
       <div className="flex items-center gap-3 mb-6">
         <SettingsIcon className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold">Algemene instellingen</h1>
@@ -127,6 +120,6 @@ function AdminSettingsPage() {
           <Save className="h-4 w-4" /> Opslaan
         </Button>
       </div>
-    </AdminLayout>
+    </div>
   );
 }
