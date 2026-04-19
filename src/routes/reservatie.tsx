@@ -13,7 +13,6 @@ import {
   MapPin,
   Car,
   Clock,
-  Euro,
 } from "lucide-react";
 import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { toast } from "sonner";
@@ -535,9 +534,7 @@ function BookingPage() {
                                   <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{s.description}</p>
                                 )}
                                 <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                                  <span className="inline-flex items-center gap-1">
-                                    <Euro className="h-3 w-3" /> €{s.price.toFixed(2)}
-                                  </span>
+                                  <span className="font-semibold text-foreground">€{s.price.toFixed(2)}</span>
                                   <span className="inline-flex items-center gap-1">
                                     <Clock className="h-3 w-3" /> {s.duration_minutes} min
                                   </span>
