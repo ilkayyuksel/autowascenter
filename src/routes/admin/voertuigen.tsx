@@ -120,11 +120,13 @@ function AdminVehiclesPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {vehicles.map((v) => (
+        {vehicles.map((v) => {
+          const VIcon = getVehicleIcon(v.slug);
+          return (
           <div key={v.id} className="rounded-2xl border border-border bg-card p-5 space-y-3">
             <div className="flex items-start gap-3">
               <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
-                <Car className="h-5 w-5 text-primary" />
+                <VIcon className="h-5 w-5 text-primary" strokeWidth={1.75} />
               </div>
               <div className="flex-1 space-y-2">
                 <Input
