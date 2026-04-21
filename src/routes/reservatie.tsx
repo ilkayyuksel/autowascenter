@@ -422,7 +422,7 @@ function BookingPage() {
           ) : (
             <>
               {/* Progress */}
-              <div className="mb-6">
+              <div className="mb-6 scroll-mt-20" ref={progressRef}>
                 <div className="relative">
                   {/* Connecting track */}
                   <div className="absolute top-4 left-0 right-0 h-0.5 bg-muted -z-0" style={{ marginLeft: `${100 / STEPS.length / 2}%`, marginRight: `${100 / STEPS.length / 2}%` }} />
