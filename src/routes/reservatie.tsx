@@ -758,12 +758,20 @@ function BookingPage() {
                         label="Diensten"
                         value={selectedServices.map((s) => s.title).join(", ") || "-"}
                       />
-                      <Row label="Datum" value={date} />
+                      <Row label="Datum" value={formatDateNL(date)} />
                       <Row
-                        label="Tijdstip"
-                        value={time ? `${time} - ${minutesToTime(timeToMinutes(time) + totalDuration)}` : "-"}
+                        label="Wagen afgeven om"
+                        value={time || "-"}
                       />
-                      <Row label="Totale duur" value={`${totalDuration} min`} />
+                      <Row
+                        label="Wagen ophalen"
+                        value={(() => {
+                          if (!time || !date) return "-";
+                          const p = computePickup(date, time, totalDuration, settings);
+                          return p.date === date ? p.time : `${formatDateNL(p.date)} om ${p.time}`;
+                        })()}
+                      />
+                      <Row label="Totale duur" value={formatDuration(totalDuration)} />
                       <Row label="Wagen" value={`${customerForm.getValues("vehicle_brand")} ${customerForm.getValues("vehicle_model")}`} />
                       <Row label="Naam" value={customerForm.getValues("customer_name")} />
                       <Row label="GSM" value={customerForm.getValues("customer_phone")} />
@@ -808,7 +816,7 @@ function BookingPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Totale duur</span>
-                        <span className="font-semibold">{totalDuration} min</span>
+                        <span className="font-semibold">{formatDuration(totalDuration)}</span>
                       </div>
                       <div className="flex justify-between text-base pt-1.5 border-t border-border mt-1.5">
                         <span className="font-semibold">Totaal</span>
