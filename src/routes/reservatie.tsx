@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { computeAvailableSlots } from "@/lib/slots";
+import { computeAvailableSlots, computePickup, formatDuration, fetchSlotData } from "@/lib/slots";
 
 export const Route = createFileRoute("/reservatie")({
   head: () => ({
@@ -77,6 +77,13 @@ type SiteSettings = {
   slot_interval_minutes: number;
 };
 
+function formatDateNL(iso: string) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString("nl-BE", { weekday: "short", day: "numeric", month: "short" });
+}
+
 // --- Validation ---
 const customerSchema = z.object({
   customer_name: z.string().trim().min(2, "Naam is verplicht").max(100),
@@ -129,8 +136,8 @@ function BookingPage() {
   const [blocked, setBlocked] = useState<BlockedPeriod[]>([]);
   const [settings, setSettings] = useState<SiteSettings>({
     km_fee: 1,
-    opening_hour: "08:00",
-    closing_hour: "22:00",
+    opening_hour: "10:00",
+    closing_hour: "21:00",
     slot_interval_minutes: 30,
   });
 
@@ -226,18 +233,17 @@ function BookingPage() {
     setTime("");
   }, [vehicleTypeId]);
 
-  // Load bookings on the chosen date for slot computation
+  // Load bookings around the chosen date so multi-day services are accounted for
   useEffect(() => {
     if (!date) {
       setBookings([]);
       return;
     }
-    supabase
-      .from("bookings")
-      .select("preferred_date,preferred_time,total_duration_minutes")
-      .eq("preferred_date", date)
-      .neq("status", "geannuleerd")
-      .then(({ data }) => data && setBookings(data as Booking[]));
+    fetchSlotData(date).then(({ bookings: bs, blocked: bl, settings: st }) => {
+      setBookings(bs);
+      setBlocked(bl);
+      setSettings((s) => ({ ...s, ...st }));
+    });
     setTime("");
   }, [date]);
 
@@ -535,7 +541,7 @@ function BookingPage() {
                                 <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                                   <span className="font-semibold text-foreground">€{s.price.toFixed(2)}</span>
                                   <span className="inline-flex items-center gap-1">
-                                    <Clock className="h-3 w-3" /> {s.duration_minutes} min
+                                    <Clock className="h-3 w-3" /> {formatDuration(s.duration_minutes)}
                                   </span>
                                 </div>
                               </div>
@@ -564,28 +570,46 @@ function BookingPage() {
                     </div>
                     {date && (
                       <div>
-                        <Label>Beschikbare tijdstippen ({totalDuration} min nodig)</Label>
+                        <Label>Wagen afgeven om — kies een vrij tijdstip ({formatDuration(totalDuration)} nodig)</Label>
                         {availableSlots.length === 0 ? (
                           <p className="mt-2 text-sm text-muted-foreground italic">
                             Geen beschikbare tijdstippen op deze datum. Kies een andere datum.
                           </p>
                         ) : (
-                          <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-4 gap-2">
-                            {availableSlots.map((t) => (
-                              <button
-                                key={t}
-                                type="button"
-                                onClick={() => setTime(t)}
-                                className={`py-3 text-sm rounded-xl border-2 font-semibold transition-all ${
-                                  time === t
-                                    ? "border-primary bg-primary text-primary-foreground shadow-elegant"
-                                    : "border-border hover:border-primary/40"
-                                }`}
-                              >
-                                {t}
-                              </button>
-                            ))}
+                          <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {availableSlots.map((t) => {
+                              const pickup = computePickup(date, t, totalDuration, settings);
+                              const sameDay = pickup.date === date;
+                              return (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onClick={() => setTime(t)}
+                                  className={`py-2.5 px-2 text-sm rounded-xl border-2 font-semibold transition-all flex flex-col items-center gap-0.5 ${
+                                    time === t
+                                      ? "border-primary bg-primary text-primary-foreground shadow-elegant"
+                                      : "border-border hover:border-primary/40"
+                                  }`}
+                                >
+                                  <span className="text-base">{t}</span>
+                                  <span className={`text-[10px] font-normal ${time === t ? "opacity-90" : "text-muted-foreground"}`}>
+                                    ophalen {sameDay ? "" : `${formatDateNL(pickup.date)} `}{pickup.time}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
+                        )}
+                        {time && (
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            U levert uw wagen af om <span className="font-semibold text-foreground">{time}</span> en kan ze ophalen om{" "}
+                            <span className="font-semibold text-foreground">
+                              {(() => {
+                                const p = computePickup(date, time, totalDuration, settings);
+                                return p.date === date ? p.time : `${formatDateNL(p.date)} ${p.time}`;
+                              })()}
+                            </span>.
+                          </p>
                         )}
                       </div>
                     )}
@@ -734,12 +758,20 @@ function BookingPage() {
                         label="Diensten"
                         value={selectedServices.map((s) => s.title).join(", ") || "-"}
                       />
-                      <Row label="Datum" value={date} />
+                      <Row label="Datum" value={formatDateNL(date)} />
                       <Row
-                        label="Tijdstip"
-                        value={time ? `${time} - ${minutesToTime(timeToMinutes(time) + totalDuration)}` : "-"}
+                        label="Wagen afgeven om"
+                        value={time || "-"}
                       />
-                      <Row label="Totale duur" value={`${totalDuration} min`} />
+                      <Row
+                        label="Wagen ophalen"
+                        value={(() => {
+                          if (!time || !date) return "-";
+                          const p = computePickup(date, time, totalDuration, settings);
+                          return p.date === date ? p.time : `${formatDateNL(p.date)} om ${p.time}`;
+                        })()}
+                      />
+                      <Row label="Totale duur" value={formatDuration(totalDuration)} />
                       <Row label="Wagen" value={`${customerForm.getValues("vehicle_brand")} ${customerForm.getValues("vehicle_model")}`} />
                       <Row label="Naam" value={customerForm.getValues("customer_name")} />
                       <Row label="GSM" value={customerForm.getValues("customer_phone")} />
@@ -784,7 +816,7 @@ function BookingPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Totale duur</span>
-                        <span className="font-semibold">{totalDuration} min</span>
+                        <span className="font-semibold">{formatDuration(totalDuration)}</span>
                       </div>
                       <div className="flex justify-between text-base pt-1.5 border-t border-border mt-1.5">
                         <span className="font-semibold">Totaal</span>
