@@ -729,9 +729,9 @@ function CreateBookingDialog(props: {
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} min={format(new Date(), "yyyy-MM-dd")} />
             </div>
             <div>
-              <Label>Duur (min)</Label>
+              <Label>Duur</Label>
               <Input
-                value={form.duration}
+                value={formatDuration(form.duration)}
                 readOnly
                 className="bg-muted"
                 title="Automatisch ingesteld op basis van de gekozen dienst"
@@ -740,24 +740,45 @@ function CreateBookingDialog(props: {
           </div>
 
           <div>
-            <Label>Vrij tijdslot * {loadingSlots && <span className="text-xs text-muted-foreground">(laden…)</span>}</Label>
+            <Label>
+              Wagen afgeven om — kies een vrij tijdslot *{" "}
+              {loadingSlots && <span className="text-xs text-muted-foreground">(laden…)</span>}
+            </Label>
             {!loadingSlots && slots.length === 0 ? (
               <p className="text-sm text-muted-foreground italic mt-2">
-                Geen vrije slots op deze datum voor {form.duration} min. Kies een andere datum of duur.
+                Geen vrije slots op deze datum voor {formatDuration(form.duration)}. Kies een andere datum of duur.
               </p>
             ) : (
-              <div className="mt-2 grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-40 overflow-y-auto">
-                {slots.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setTime(s)}
-                    className={`px-2 py-1.5 rounded-md text-sm border transition ${time === s ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-border"}`}
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto">
+                {slots.map((s) => {
+                  const pickup = computePickup(date, s, form.duration, settings);
+                  const sameDay = pickup.date === date;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setTime(s)}
+                      className={`px-2 py-1.5 rounded-md text-sm border transition flex flex-col items-center leading-tight ${time === s ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-border"}`}
+                    >
+                      <span className="font-semibold">{s}</span>
+                      <span className={`text-[10px] ${time === s ? "opacity-90" : "text-muted-foreground"}`}>
+                        ophalen {sameDay ? "" : "+"}{pickup.time}{!sameDay && "*"}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+            )}
+            {time && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Afgeven <span className="font-semibold text-foreground">{time}</span> · ophalen{" "}
+                <span className="font-semibold text-foreground">
+                  {(() => {
+                    const p = computePickup(date, time, form.duration, settings);
+                    return p.date === date ? p.time : `${p.date} om ${p.time}`;
+                  })()}
+                </span>
+              </p>
             )}
           </div>
 
