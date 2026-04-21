@@ -44,6 +44,9 @@ import {
   fetchSlotData,
   timeToMinutes,
   minutesToTime,
+  formatDuration,
+  computePickup,
+  type SlotSettings,
 } from "@/lib/slots";
 
 export const Route = createFileRoute("/admin/agenda")({
@@ -106,8 +109,8 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
   geannuleerd: "Geannuleerd",
 };
 
-const HOUR_START = 8;
-const HOUR_END = 22;
+const HOUR_START = 10;
+const HOUR_END = 21;
 const PX_PER_HOUR = 64;
 const TOTAL_HEIGHT = (HOUR_END - HOUR_START) * PX_PER_HOUR;
 
