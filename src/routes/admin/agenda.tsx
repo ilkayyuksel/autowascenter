@@ -941,7 +941,7 @@ function EditBookingDialog(props: {
               />
             </div>
             <div>
-              <Label>Duur (min)</Label>
+              <Label>Duur</Label>
               <Select
                 value={String(duration)}
                 onValueChange={(val) => {
@@ -951,8 +951,8 @@ function EditBookingDialog(props: {
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {[30, 45, 60, 90, 120, 150, 180, 240, 300].map((m) => (
-                    <SelectItem key={m} value={String(m)}>{m} min</SelectItem>
+                  {[30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600, 720, 900, 1200].map((m) => (
+                    <SelectItem key={m} value={String(m)}>{formatDuration(m)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -978,7 +978,7 @@ function EditBookingDialog(props: {
               <p className="text-sm text-muted-foreground italic mt-2">Vrije slots laden…</p>
             ) : slots.length === 0 ? (
               <p className="text-sm text-muted-foreground italic mt-2">
-                Geen vrije slots op deze datum voor {duration} min.
+                Geen vrije slots op deze datum voor {formatDuration(duration)}.
               </p>
             ) : (
               <div className="mt-2 grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-40 overflow-y-auto">
