@@ -541,7 +541,7 @@ function BookingPage() {
                                 <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                                   <span className="font-semibold text-foreground">€{s.price.toFixed(2)}</span>
                                   <span className="inline-flex items-center gap-1">
-                                    <Clock className="h-3 w-3" /> {s.duration_minutes} min
+                                    <Clock className="h-3 w-3" /> {formatDuration(s.duration_minutes)}
                                   </span>
                                 </div>
                               </div>
@@ -570,28 +570,46 @@ function BookingPage() {
                     </div>
                     {date && (
                       <div>
-                        <Label>Beschikbare tijdstippen ({totalDuration} min nodig)</Label>
+                        <Label>Wagen afgeven om — kies een vrij tijdstip ({formatDuration(totalDuration)} nodig)</Label>
                         {availableSlots.length === 0 ? (
                           <p className="mt-2 text-sm text-muted-foreground italic">
                             Geen beschikbare tijdstippen op deze datum. Kies een andere datum.
                           </p>
                         ) : (
-                          <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-4 gap-2">
-                            {availableSlots.map((t) => (
-                              <button
-                                key={t}
-                                type="button"
-                                onClick={() => setTime(t)}
-                                className={`py-3 text-sm rounded-xl border-2 font-semibold transition-all ${
-                                  time === t
-                                    ? "border-primary bg-primary text-primary-foreground shadow-elegant"
-                                    : "border-border hover:border-primary/40"
-                                }`}
-                              >
-                                {t}
-                              </button>
-                            ))}
+                          <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {availableSlots.map((t) => {
+                              const pickup = computePickup(date, t, totalDuration, settings);
+                              const sameDay = pickup.date === date;
+                              return (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onClick={() => setTime(t)}
+                                  className={`py-2.5 px-2 text-sm rounded-xl border-2 font-semibold transition-all flex flex-col items-center gap-0.5 ${
+                                    time === t
+                                      ? "border-primary bg-primary text-primary-foreground shadow-elegant"
+                                      : "border-border hover:border-primary/40"
+                                  }`}
+                                >
+                                  <span className="text-base">{t}</span>
+                                  <span className={`text-[10px] font-normal ${time === t ? "opacity-90" : "text-muted-foreground"}`}>
+                                    ophalen {sameDay ? "" : `${formatDateNL(pickup.date)} `}{pickup.time}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
+                        )}
+                        {time && (
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            U levert uw wagen af om <span className="font-semibold text-foreground">{time}</span> en kan ze ophalen om{" "}
+                            <span className="font-semibold text-foreground">
+                              {(() => {
+                                const p = computePickup(date, time, totalDuration, settings);
+                                return p.date === date ? p.time : `${formatDateNL(p.date)} ${p.time}`;
+                              })()}
+                            </span>.
+                          </p>
                         )}
                       </div>
                     )}
