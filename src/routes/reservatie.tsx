@@ -136,8 +136,8 @@ function BookingPage() {
   const [blocked, setBlocked] = useState<BlockedPeriod[]>([]);
   const [settings, setSettings] = useState<SiteSettings>({
     km_fee: 1,
-    opening_hour: "08:00",
-    closing_hour: "22:00",
+    opening_hour: "10:00",
+    closing_hour: "21:00",
     slot_interval_minutes: 30,
   });
 
@@ -233,18 +233,17 @@ function BookingPage() {
     setTime("");
   }, [vehicleTypeId]);
 
-  // Load bookings on the chosen date for slot computation
+  // Load bookings around the chosen date so multi-day services are accounted for
   useEffect(() => {
     if (!date) {
       setBookings([]);
       return;
     }
-    supabase
-      .from("bookings")
-      .select("preferred_date,preferred_time,total_duration_minutes")
-      .eq("preferred_date", date)
-      .neq("status", "geannuleerd")
-      .then(({ data }) => data && setBookings(data as Booking[]));
+    fetchSlotData(date).then(({ bookings: bs, blocked: bl, settings: st }) => {
+      setBookings(bs);
+      setBlocked(bl);
+      setSettings((s) => ({ ...s, ...st }));
+    });
     setTime("");
   }, [date]);
 
