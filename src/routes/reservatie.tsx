@@ -128,6 +128,16 @@ function BookingPage() {
   const [step, setStep] = useState(1);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const isFirstStep = useRef(true);
+
+  useEffect(() => {
+    if (isFirstStep.current) {
+      isFirstStep.current = false;
+      return;
+    }
+    progressRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [step]);
 
   // Data from DB
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
