@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { computeAvailableSlots } from "@/lib/slots";
+import { computeAvailableSlots, computePickup, formatDuration, fetchSlotData } from "@/lib/slots";
 
 export const Route = createFileRoute("/reservatie")({
   head: () => ({
@@ -76,6 +76,13 @@ type SiteSettings = {
   closing_hour: string;
   slot_interval_minutes: number;
 };
+
+function formatDateNL(iso: string) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString("nl-BE", { weekday: "short", day: "numeric", month: "short" });
+}
 
 // --- Validation ---
 const customerSchema = z.object({
