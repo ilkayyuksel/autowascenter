@@ -486,6 +486,11 @@ function CreateBookingDialog(props: {
   const [saving, setSaving] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
   const [vtServices, setVtServices] = useState<VtService[]>([]);
+  const [settings, setSettings] = useState<SlotSettings>({
+    opening_hour: "10:00",
+    closing_hour: "21:00",
+    slot_interval_minutes: 30,
+  });
 
   useEffect(() => {
     supabase
@@ -533,13 +538,14 @@ function CreateBookingDialog(props: {
       return;
     }
     setLoadingSlots(true);
-    const { bookings, blocked, settings } = await fetchSlotData(date);
+    const { bookings, blocked, settings: st } = await fetchSlotData(date);
+    setSettings(st);
     const s = computeAvailableSlots({
       date,
       durationMinutes: form.duration,
       bookings,
       blocked,
-      settings,
+      settings: st,
     });
     setSlots(s);
     setLoadingSlots(false);
@@ -709,7 +715,7 @@ function CreateBookingDialog(props: {
                 <SelectContent>
                   {vtServices.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {s.title} — €{s.price.toFixed(2)} · {s.duration_minutes} min
+                      {s.title} — €{s.price.toFixed(2)} · {formatDuration(s.duration_minutes)}
                     </SelectItem>
                   ))}
                 </SelectContent>
