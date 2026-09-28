@@ -14,6 +14,7 @@ export const Route = createFileRoute("/admin/instellingen")({
 type Settings = {
   id: string;
   km_fee: number;
+  free_km: number;
   base_address: string;
   base_city: string;
   opening_hour: string;
@@ -38,6 +39,7 @@ function AdminSettingsPage() {
       .from("site_settings")
       .update({
         km_fee: settings.km_fee,
+        free_km: settings.free_km,
         base_address: settings.base_address,
         base_city: settings.base_city,
         opening_hour: settings.opening_hour,
@@ -65,6 +67,14 @@ function AdminSettingsPage() {
             step="0.01"
             value={settings.km_fee}
             onChange={(e) => setSettings({ ...settings, km_fee: Number(e.target.value) })}
+          />
+        </div>
+        <div>
+          <Label>Gratis km (straal vanaf basisadres)</Label>
+          <Input
+            type="number"
+            value={settings.free_km}
+            onChange={(e) => setSettings({ ...settings, free_km: Number(e.target.value) })}
           />
         </div>
         <div>
