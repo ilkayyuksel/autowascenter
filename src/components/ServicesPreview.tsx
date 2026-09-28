@@ -74,7 +74,7 @@ export function ServicesPreview() {
                 <p className="mt-2 text-sm text-muted-foreground line-clamp-3">{s.description}</p>
                 <div className="mt-5 pt-4 border-t border-border flex items-baseline justify-between">
                   {s.price != null && (
-                    <span className="text-xl font-bold">€{Number(s.price).toFixed(0)}</span>
+                    <span className="text-xl font-bold">€{Number(s.price).toFixed(0)} <span className="text-xs font-normal text-muted-foreground">excl. btw</span></span>
                   )}
                   {s.duration_minutes != null && (
                     <span className="text-xs text-muted-foreground">{s.duration_minutes} min</span>

@@ -24,7 +24,7 @@ type VehicleType = {
   active: boolean;
 };
 
-type Service = { id: string; title: string; bookable: boolean };
+type Service = { id: string; title: string; bookable: boolean; kind: string };
 
 type Vts = {
   id: string;
@@ -44,7 +44,7 @@ function AdminVehiclesPage() {
   const refresh = async () => {
     const [v, s, m] = await Promise.all([
       supabase.from("vehicle_types").select("*").order("sort_order"),
-      supabase.from("services").select("id,title,bookable").eq("active", true).eq("bookable", true).order("title"),
+      supabase.from("services").select("id,title,bookable,kind").eq("active", true).eq("bookable", true).order("title"),
       supabase.from("vehicle_type_services").select("*"),
     ]);
     if (v.data) setVehicles(v.data as VehicleType[]);
@@ -188,7 +188,7 @@ function AdminVehiclesPage() {
                         checked={row.available}
                         onCheckedChange={(c) => updateVts(row.id, { available: !!c })}
                       />
-                      <div className="col-span-5 truncate">{svc.title}</div>
+                      <div className="col-span-5 truncate">{svc.title}{svc.kind !== "dienst" && <span className="ml-1 text-[10px] text-primary">({svc.kind === "pakket" ? "pakket" : "extra"})</span>}</div>
                       <div className="col-span-3">
                         <Input
                           type="number"

@@ -55,6 +55,8 @@ type ServiceOption = {
   badge: string | null;
   price: number;
   duration_minutes: number;
+  kind: string;
+  includes: string[];
 };
 
 type Booking = {
@@ -72,6 +74,7 @@ type BlockedPeriod = {
 
 type SiteSettings = {
   km_fee: number;
+  free_km?: number;
   opening_hour: string;
   closing_hour: string;
   slot_interval_minutes: number;
@@ -107,9 +110,10 @@ type CustomerForm = z.infer<typeof customerSchema>;
 const STEPS = [
   { id: 1, label: "Voertuig" },
   { id: 2, label: "Diensten" },
-  { id: 3, label: "Datum & uur" },
-  { id: 4, label: "Gegevens" },
-  { id: 5, label: "Bevestigen" },
+  { id: 3, label: "Extra's" },
+  { id: 4, label: "Datum & uur" },
+  { id: 5, label: "Gegevens" },
+  { id: 6, label: "Bevestigen" },
 ];
 
 // --- Helpers ---
@@ -193,13 +197,14 @@ function BookingPage() {
 
     supabase
       .from("site_settings")
-      .select("km_fee,opening_hour,closing_hour,slot_interval_minutes")
+      .select("km_fee,free_km,opening_hour,closing_hour,slot_interval_minutes")
       .limit(1)
       .single()
       .then(({ data }) => {
         if (data) {
           setSettings({
             km_fee: Number(data.km_fee),
+            free_km: Number(data.free_km),
             opening_hour: data.opening_hour,
             closing_hour: data.closing_hour,
             slot_interval_minutes: data.slot_interval_minutes,
@@ -217,12 +222,15 @@ function BookingPage() {
     supabase
       .from("vehicle_type_services")
       .select(
-        "id,service_id,price,duration_minutes,available,services!inner(id,title,description,category,badge,bookable,active,sort_order)",
+        "id,service_id,price,duration_minutes,available,services!inner(id,title,description,category,badge,bookable,active,sort_order,kind)",
       )
       .eq("vehicle_type_id", vehicleTypeId)
       .eq("available", true)
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!data) return;
+        const { data: ps } = await supabase.from("package_services").select("package_id,services!package_services_service_id_fkey(title)");
+        const inc: Record<string, string[]> = {};
+        ((ps as any[]) ?? []).forEach((r) => { if (r.services?.title) (inc[r.package_id] ??= []).push(r.services.title); });
         const opts: ServiceOption[] = (data as any[])
           .filter((row) => row.services?.bookable && row.services?.active)
           .map((row) => ({
@@ -234,6 +242,8 @@ function BookingPage() {
             badge: row.services.badge,
             price: Number(row.price),
             duration_minutes: Number(row.duration_minutes),
+            kind: row.services.kind ?? "dienst",
+            includes: inc[row.service_id] ?? [],
           }))
           .sort((a, b) => a.title.localeCompare(b.title));
         setServiceOptions(opts);
@@ -266,6 +276,9 @@ function BookingPage() {
   const totalServicesPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
   const locationFee = onLocation && !inSN ? 0 : 0; // dynamic distance not yet computed
   const totalPrice = totalServicesPrice + locationFee;
+  const vatAmount = totalPrice * 0.21;
+  const totalInclVat = totalPrice + vatAmount;
+  const freeKm = settings.free_km ?? 20;
   const selectedVehicleType = vehicleTypes.find((v) => v.id === vehicleTypeId);
 
   // Available time slots — uses shared computation (single source of truth)
@@ -284,17 +297,17 @@ function BookingPage() {
   // Step navigation guards
   const canNext = () => {
     if (step === 1) return !!vehicleTypeId;
-    if (step === 2) return selectedServiceVtsIds.length > 0;
-    if (step === 3) return !!date && !!time;
+    if (step === 2) return selectedServices.some((x) => x.kind !== "extra");
+    if (step === 4) return !!date && !!time;
     return true;
   };
 
   const next = async () => {
-    if (step === 4) {
+    if (step === 5) {
       const valid = await customerForm.trigger();
       if (!valid) return;
     }
-    if (!canNext() && step !== 4) {
+    if (!canNext() && step !== 5) {
       toast.error("Vul deze stap eerst in.");
       return;
     }
@@ -503,68 +516,58 @@ function BookingPage() {
                   </div>
                 )}
 
-                {/* Step 2: Services */}
+                {/* Step 2: Packages & services */}
                 {step === 2 && (
-                  <div className="space-y-4">
-                    <h2 className="text-xl font-bold">Welke diensten wenst u?</h2>
-                    <p className="text-sm text-muted-foreground">
-                      Meerdere keuzes mogelijk. Prijs en duur zijn aangepast aan uw voertuigtype.
-                    </p>
-                    {serviceOptions.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic">
-                        Geen diensten beschikbaar voor dit voertuigtype.
+                  <div className="space-y-6">
+                    <div>
+                      <h2 className="text-xl font-bold">Diensten en pakketten</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Meerdere keuzes mogelijk. Prijs en duur zijn aangepast aan uw voertuigtype. Alle prijzen excl. btw.
                       </p>
+                    </div>
+                    {serviceOptions.filter((s) => s.kind !== "extra").length === 0 && (
+                      <p className="text-sm text-muted-foreground italic">Geen diensten beschikbaar voor dit voertuigtype.</p>
+                    )}
+                    {(["pakket", "dienst"] as const).map((k) => {
+                      const group = serviceOptions.filter((s) => s.kind === k);
+                      if (!group.length) return null;
+                      return (
+                        <div key={k}>
+                          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                            {k === "pakket" ? "Pakketten" : "Diensten"}
+                          </h3>
+                          <div className="grid gap-3">
+                            {group.map((s) => (
+                              <OptionCard key={s.id} s={s} sel={selectedServiceVtsIds.includes(s.id)} onClick={() => toggleService(s.id)} />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Step 3: Extras */}
+                {step === 3 && (
+                  <div className="space-y-4">
+                    <div>
+                      <h2 className="text-xl font-bold">Extra diensten</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">Optioneel — voeg extra's toe of ga gewoon verder. Prijzen excl. btw.</p>
+                    </div>
+                    {serviceOptions.filter((s) => s.kind === "extra").length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic">Geen extra diensten beschikbaar voor dit voertuigtype.</p>
                     ) : (
                       <div className="grid gap-3">
-                        {serviceOptions.map((s) => {
-                          const sel = selectedServiceVtsIds.includes(s.id);
-                          return (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onClick={() => toggleService(s.id)}
-                              className={`text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-3 ${
-                                sel
-                                  ? "border-primary bg-accent shadow-elegant"
-                                  : "border-border hover:border-primary/40"
-                              }`}
-                            >
-                              <div
-                                className={`h-6 w-6 mt-0.5 rounded-md flex items-center justify-center flex-shrink-0 border-2 ${
-                                  sel ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30"
-                                }`}
-                              >
-                                {sel && <Check className="h-4 w-4" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <div className="font-semibold">{s.title}</div>
-                                  {s.badge && (
-                                    <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                      {s.badge}
-                                    </span>
-                                  )}
-                                </div>
-                                {s.description && (
-                                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{s.description}</p>
-                                )}
-                                <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                                  <span className="font-semibold text-foreground">€{s.price.toFixed(2)}</span>
-                                  <span className="inline-flex items-center gap-1">
-                                    <Clock className="h-3 w-3" /> {formatDuration(s.duration_minutes)}
-                                  </span>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
+                        {serviceOptions.filter((s) => s.kind === "extra").map((s) => (
+                          <OptionCard key={s.id} s={s} sel={selectedServiceVtsIds.includes(s.id)} onClick={() => toggleService(s.id)} />
+                        ))}
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Step 3: Date & time */}
-                {step === 3 && (
+                {/* Step 4: Date & time */}
+                {step === 4 && (
                   <div className="space-y-5">
                     <h2 className="text-xl font-bold">Wanneer past het u?</h2>
                     <div>
@@ -627,7 +630,7 @@ function BookingPage() {
                 )}
 
                 {/* Step 4: Customer */}
-                {step === 4 && (
+                {step === 5 && (
                   <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
                     <h2 className="text-xl font-bold">Uw gegevens</h2>
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -670,8 +673,8 @@ function BookingPage() {
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="notes">Bericht (optioneel)</Label>
-                      <Textarea id="notes" rows={3} {...customerForm.register("notes")} className="mt-1.5" />
+                      <Label htmlFor="notes">Opmerking (optioneel)</Label>
+                      <Textarea id="notes" rows={3} placeholder="Bv. specifieke vlekken, wensen of vragen over uw wagen" {...customerForm.register("notes")} className="mt-1.5" />
                     </div>
 
                     {/* Company */}
@@ -744,10 +747,10 @@ function BookingPage() {
                               <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground flex gap-2">
                                 <Info className="h-4 w-4 text-primary flex-shrink-0" />
                                 <span>
-                                  Voor service op locatie buiten Sint-Niklaas geldt een vergoeding van
-                                  <span className="font-semibold text-foreground"> €{settings.km_fee.toFixed(2)} per km </span>
-                                  vanaf Raapstraat 34, 9100 Sint-Niklaas. De exacte vergoeding wordt
-                                  berekend en met u afgestemd na ontvangst van uw aanvraag.
+                                  De eerste <span className="font-semibold text-foreground">{freeKm} km</span> vanaf
+                                  Raapstraat 34, 9100 Sint-Niklaas zijn gratis. Daarbuiten rekenen we
+                                  <span className="font-semibold text-foreground"> €{settings.km_fee.toFixed(2)} per km</span> (excl. btw).
+                                  De exacte vergoeding wordt met u afgestemd na ontvangst van uw aanvraag.
                                 </span>
                               </div>
                             </>
@@ -758,8 +761,8 @@ function BookingPage() {
                   </form>
                 )}
 
-                {/* Step 5: Confirm */}
-                {step === 5 && (
+                {/* Step 6: Confirm */}
+                {step === 6 && (
                   <div className="space-y-4">
                     <h2 className="text-xl font-bold">Controleer uw reservatie</h2>
                     <dl className="rounded-2xl bg-accent/40 p-5 space-y-3 text-sm">
@@ -782,6 +785,7 @@ function BookingPage() {
                         })()}
                       />
                       <Row label="Totale duur" value={formatDuration(totalDuration)} />
+                      {customerForm.getValues("notes") && <Row label="Opmerking" value={customerForm.getValues("notes") ?? ""} />}
                       <Row label="Wagen" value={`${customerForm.getValues("vehicle_brand")} ${customerForm.getValues("vehicle_model")}`} />
                       <Row label="Naam" value={customerForm.getValues("customer_name")} />
                       <Row label="GSM" value={customerForm.getValues("customer_phone")} />
@@ -797,8 +801,16 @@ function BookingPage() {
                         }
                       />
                       <div className="border-t border-border pt-3 mt-3 flex justify-between text-base">
-                        <dt className="font-semibold">Totaal</dt>
-                        <dd className="font-bold text-primary">€{totalPrice.toFixed(2)}</dd>
+                        <dt className="font-semibold">Totaal excl. btw</dt>
+                        <dd className="font-semibold">€{totalPrice.toFixed(2)}</dd>
+                      </div>
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <dt>Btw 21%</dt>
+                        <dd>€{vatAmount.toFixed(2)}</dd>
+                      </div>
+                      <div className="flex justify-between text-base">
+                        <dt className="font-semibold">Totaal incl. btw</dt>
+                        <dd className="font-bold text-primary">€{totalInclVat.toFixed(2)}</dd>
                       </div>
                     </dl>
                     <p className="text-xs text-muted-foreground text-center">
@@ -808,7 +820,7 @@ function BookingPage() {
                 )}
 
                 {/* Live summary (steps 2-4) */}
-                {step >= 2 && step < 5 && selectedServices.length > 0 && (
+                {step >= 2 && step < 6 && selectedServices.length > 0 && (
                   <div className="mt-6 rounded-xl bg-accent/40 border border-border p-4">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       Samenvatting
@@ -829,8 +841,12 @@ function BookingPage() {
                         <span className="font-semibold">{formatDuration(totalDuration)}</span>
                       </div>
                       <div className="flex justify-between text-base pt-1.5 border-t border-border mt-1.5">
-                        <span className="font-semibold">Totaal</span>
-                        <span className="font-bold text-primary">€{totalPrice.toFixed(2)}</span>
+                        <span className="font-semibold">Totaal excl. btw</span>
+                        <span className="font-semibold">€{totalPrice.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-semibold">Totaal incl. btw</span>
+                        <span className="font-bold text-primary">€{totalInclVat.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -847,7 +863,7 @@ function BookingPage() {
                     <Button
                       type="button"
                       onClick={next}
-                      disabled={!canNext() && step !== 4}
+                      disabled={!canNext() && step !== 5}
                       className="h-12 flex-1 bg-gradient-primary shadow-elegant"
                     >
                       Volgende <ArrowRight className="h-4 w-4" />
@@ -879,5 +895,53 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="font-semibold text-right break-words">{value}</dd>
     </div>
+  );
+}
+
+function OptionCard({ s, sel, onClick }: { s: ServiceOption; sel: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-3 ${
+        sel ? "border-primary bg-accent shadow-elegant" : "border-border hover:border-primary/40"
+      }`}
+    >
+      <div
+        className={`h-6 w-6 mt-0.5 rounded-md flex items-center justify-center flex-shrink-0 border-2 ${
+          sel ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30"
+        }`}
+      >
+        {sel && <Check className="h-4 w-4" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="font-semibold">{s.title}</div>
+          {s.kind === "pakket" && (
+            <span className="text-[10px] font-semibold bg-primary text-primary-foreground px-2 py-0.5 rounded-full">Pakket</span>
+          )}
+          {s.kind === "extra" && (
+            <span className="text-[10px] font-semibold bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full">Extra dienst</span>
+          )}
+          {s.badge && (
+            <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full">{s.badge}</span>
+          )}
+        </div>
+        {s.description && <p className="mt-1 text-xs text-muted-foreground line-clamp-3">{s.description}</p>}
+        {s.includes.length > 0 && (
+          <ul className="mt-2 text-xs text-muted-foreground space-y-0.5">
+            {s.includes.map((t) => (
+              <li key={t} className="flex items-center gap-1.5"><Check className="h-3 w-3 text-primary" /> {t}</li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">€{s.price.toFixed(2)} <span className="font-normal text-muted-foreground">excl. btw</span></span>
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" /> {formatDuration(s.duration_minutes)}
+          </span>
+        </div>
+      </div>
+    </button>
   );
 }
