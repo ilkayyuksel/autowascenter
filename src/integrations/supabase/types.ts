@@ -236,6 +236,42 @@ export type Database = {
         }
         Relationships: []
       }
+      package_services: {
+        Row: {
+          created_at: string
+          id: string
+          package_id: string
+          service_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          package_id: string
+          service_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          package_id?: string
+          service_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_services_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reviews: {
         Row: {
           approved: boolean
@@ -278,6 +314,7 @@ export type Database = {
           icon: string | null
           id: string
           image_url: string | null
+          kind: string
           price: number | null
           sort_order: number
           title: string
@@ -294,6 +331,7 @@ export type Database = {
           icon?: string | null
           id?: string
           image_url?: string | null
+          kind?: string
           price?: number | null
           sort_order?: number
           title: string
@@ -310,6 +348,7 @@ export type Database = {
           icon?: string | null
           id?: string
           image_url?: string | null
+          kind?: string
           price?: number | null
           sort_order?: number
           title?: string
@@ -323,6 +362,7 @@ export type Database = {
           base_city: string
           closing_hour: string
           created_at: string
+          free_km: number
           id: string
           km_fee: number
           notification_email: string | null
@@ -335,6 +375,7 @@ export type Database = {
           base_city?: string
           closing_hour?: string
           created_at?: string
+          free_km?: number
           id?: string
           km_fee?: number
           notification_email?: string | null
@@ -347,6 +388,7 @@ export type Database = {
           base_city?: string
           closing_hour?: string
           created_at?: string
+          free_km?: number
           id?: string
           km_fee?: number
           notification_email?: string | null
