@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, Outlet } from "@tanstack/react-router";
+import { useAuth0 } from "@auth0/auth0-react";
+import { Link, useLocation, Outlet } from "@tanstack/react-router";
 import { LayoutDashboard, Calendar, CalendarDays, Sparkles, Image, LogOut, Menu, X, Car, CalendarX, Settings } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 
@@ -18,16 +18,14 @@ const NAV = [
 
 export function AdminLayout({ children }: { children?: ReactNode }) {
   const { pathname } = useLocation();
-  const navigate = useNavigate();
+  const { logout } = useAuth0();
   const [open, setOpen] = useState(false);
 
   const isActive = (to: string, exact?: boolean) =>
     exact ? pathname === to : pathname.startsWith(to);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate({ to: "/admin-login" });
-  };
+  // Clears the SDK's in-memory tokens and the Auth0 session, then returns to the public site.
+  const handleLogout = () => logout({ logoutParams: { returnTo: window.location.origin } });
 
   return (
     <div className="min-h-screen bg-gradient-subtle">

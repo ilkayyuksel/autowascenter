@@ -4,13 +4,14 @@
 
 Self-hosted backend for Autowascenter. It will take over all database access and business logic that the frontend currently performs directly against Supabase.
 
-**Current scope (phases 3–4):**
+**Current scope (phases 3–5):**
 
 - Health endpoints.
 - Read-only public endpoints for services, gallery, reviews, vehicle types and the bookable options per vehicle type.
 - **Server-side booking engine**: `GET /api/availability` and `POST /api/bookings`. Pricing, duration, opening hours, blocked periods and overlap protection all run on the server, in one transaction. See `docs/API-V1.md` and `docs/BOOKING-BUSINESS-LOGIC.md`.
+- **Auth0 authentication and authorization** (phase 5): JWT validation against the Auth0 JWKS plus RBAC permission checks. The only protected endpoint so far is `GET /api/admin/me`. See `docs/AUTH0-MIGRATION.md` and `docs/AUTH0-SETUP.md`.
 
-**Not included yet:** authentication, admin endpoints, cancellation, e-mail notifications.
+**Not included yet:** admin CRUD (phase 6), cancellation, e-mail notifications.
 
 **The frontend does not use this API yet.** It still talks to Supabase directly.
 
@@ -36,6 +37,9 @@ src/
   lib/               business-time (Europe/Brussels), validate (Zod → 400)
   routes/health.ts   /health, /health/db
   routes/public/     index.ts: catalogue GETs; bookings.ts: /availability, /bookings
+  routes/admin/      /api/admin/*: every route requires admin:access
+  auth/              verifier (jose, JWKS, RS256), principal, plugin
+                     (authenticate + requirePermission)
   services/          catalog, gallery, reviews; pricing, schedule (pure slot rules),
                      availability, booking (transaction)
   errors/            AppError + central error handler
@@ -45,7 +49,7 @@ test/                node:test suites (PGlite)
 ```
 
 - **Booking and availability contracts** (request schemas and response shapes) live in `packages/shared`. It is linked as `"@autowascenter/shared": "file:../../packages/shared"`, so there are no root workspaces. Validation uses `safeParse` (`lib/validate.ts`), so it does not depend on which zod copy a schema comes from.
-- **Dependencies** (versions pinned exactly, locked in `package-lock.json`): `fastify` 5.12.5, `@fastify/cors` 11.3.0, `@fastify/rate-limit` 11.2.0, `zod` 4.6.5, `drizzle-orm` 0.45.3, `pg` 8.23.0.
+- **Dependencies** (versions pinned exactly, locked in `package-lock.json`): `fastify` 5.12.5, `@fastify/cors` 11.3.0, `@fastify/rate-limit` 11.2.0, `jose` 6.2.12, `zod` 4.6.5, `drizzle-orm` 0.45.3, `pg` 8.23.0.
 - **Dev dependencies**: `drizzle-kit`, `typescript`, `@electric-sql/pglite`, `@types/*`.
 - **Execution**: Node ≥ 22.18 runs the TypeScript sources directly (built-in type stripping). There is no build step. `tsc --noEmit` does the type checking, and `erasableSyntaxOnly` keeps the code strippable.
 
@@ -53,16 +57,21 @@ test/                node:test suites (PGlite)
 
 See `.env.example`. `npm run dev` loads `.env` automatically (`--env-file-if-exists`); `npm start` reads only the real environment.
 
-| Variable                       | Required              | Default                                      | Notes                                                                                                                    |
-| ------------------------------ | --------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`                 | yes                   | —                                            | Self-hosted PostgreSQL, **not** Supabase. Secret: never logged, never returned, never included in config error messages. |
-| `NODE_ENV`                     | no                    | `development`                                | `development`, `test` or `production`                                                                                    |
-| `HOST`                         | no                    | `127.0.0.1`                                  | Use `0.0.0.0` inside a container                                                                                         |
-| `PORT`                         | no                    | `3001`                                       |                                                                                                                          |
-| `CORS_ORIGIN`                  | **yes in production** | `http://localhost:8080` (outside production) | Comma-separated list of allowed browser origins. `*` is rejected in production.                                          |
-| `LOG_LEVEL`                    | no                    | `info`                                       | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                                                           |
-| `BOOKING_RATE_LIMIT_MAX`       | no                    | `10`                                         | Max `POST /api/bookings` requests per client IP per window                                                               |
-| `BOOKING_RATE_LIMIT_WINDOW_MS` | no                    | `60000`                                      | Rate-limit window in ms (≥ 1000)                                                                                         |
+| Variable                       | Required              | Default                                      | Notes                                                                                                                      |
+| ------------------------------ | --------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                 | yes                   | —                                            | Self-hosted PostgreSQL, **not** Supabase. Secret: never logged, never returned, never included in config error messages.   |
+| `NODE_ENV`                     | no                    | `development`                                | `development`, `test` or `production`                                                                                      |
+| `HOST`                         | no                    | `127.0.0.1`                                  | Use `0.0.0.0` inside a container                                                                                           |
+| `PORT`                         | no                    | `3001`                                       |                                                                                                                            |
+| `CORS_ORIGIN`                  | **yes in production** | `http://localhost:8080` (outside production) | Comma-separated list of allowed browser origins. `*` is rejected in production.                                            |
+| `LOG_LEVEL`                    | no                    | `info`                                       | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                                                             |
+| `BOOKING_RATE_LIMIT_MAX`       | no                    | `10`                                         | Max `POST /api/bookings` requests per client IP per window                                                                 |
+| `BOOKING_RATE_LIMIT_WINDOW_MS` | no                    | `60000`                                      | Rate-limit window in ms (≥ 1000)                                                                                           |
+| `AUTH0_DOMAIN`                 | **yes in production** | —                                            | Auth0 tenant host (no `https://`). The JWKS URL `https://<domain>/.well-known/jwks.json` is derived from it. Not a secret. |
+| `AUTH0_AUDIENCE`               | **yes in production** | —                                            | Auth0 API identifier; must equal the frontend's `VITE_AUTH0_AUDIENCE`. Must be set together with `AUTH0_DOMAIN`.           |
+| `AUTH0_ISSUER`                 | no                    | `https://<AUTH0_DOMAIN>/`                    | Only needed with an Auth0 custom domain                                                                                    |
+
+Without `AUTH0_*` (only allowed outside production), `/api/admin/*` answers **503 `AUTHENTICATION_UNAVAILABLE`**. It is never open. The API needs **no** Auth0 client secret.
 
 Invalid configuration stops the process at startup with exit code 1 and names the invalid variables only.
 
@@ -155,6 +164,7 @@ npm test        # node --test "test/**/*.test.ts"
 | `test/business-logic.test.ts` | Pure rules: Europe/Brussels conversion incl. both DST days, slot grid, multi-day segments, blocked periods, cents and VAT rounding (15 tests)                                                                                                                                                                                                                                                                             |
 | `test/booking-engine.test.ts` | Pricing (single, several, package, package + extra/included, vehicle types, catalogue change/snapshot, invalid/inactive/unavailable), availability (free, booked, cancelled, blocked, opening hours, multi-day, adjacent, overlap start/end/contained, today/past, DST), booking creation, **concurrency** (two simultaneous bookings → 1 success + 1 conflict), exclusion-constraint fallback → 409, rollback (28 tests) |
 | `test/bookings-api.test.ts`   | HTTP: availability and booking contracts, validation, rejected client-supplied totals/status/token, 404/409/422, concurrent POSTs, CORS preflight, rate limit 429, database failure (13 tests)                                                                                                                                                                                                                            |
+| `test/auth.test.ts`           | Auth0 JWT validation without a real tenant (RSA keys generated per run, local and HTTP JWKS): missing, malformed, bad-signature, tampered, wrong-issuer, wrong-audience, expired, not-yet-valid, HS256/`none`, no-`sub` tokens → 401; no permission → 403; `admin:access` → 200 with only `sub`/`permissions`; public endpoints stay public; unconfigured / JWKS down → 503; CORS; **no tokens in logs** (16 tests)       |
 
 **PGlite** (`@electric-sql/pglite`, dev only) is the real PostgreSQL engine compiled to WASM, running in-process with `btree_gist`. `test/helpers/test-db.ts` applies all migrations from `drizzle/`, so the tests run against the production schema. No external database, Docker or production data is used. The unreachable-database tests are the only ones that use the `pg` driver; they need no running server.
 
@@ -170,15 +180,16 @@ npm test        # node --test "test/**/*.test.ts"
 
 ## Authentication boundary
 
-**Auth0 is added in a later phase.**
+**Auth0 is the external identity provider** (since phase 5). The API is authoritative for authorization.
 
-- There is no authentication of any kind yet: no Auth0, no fake or temporary tokens, no hardcoded admin credentials.
-- The catalogue endpoints are public reads of data that Supabase RLS already exposes to anonymous users. The API is stricter: it filters inactive and unavailable rows and does not expose `blocked_periods.reason` or `site_settings`.
-- **The only write endpoint is the public `POST /api/bookings`.**
-  - The client sends only choices and customer data. The server computes price, duration, totals, status (`nieuw`), `start_at`/`end_at`, and the cancel token (DB default).
-  - It is rate limited and validated with Zod, runs in one transaction, and is protected by the exclusion constraint.
-- **No admin endpoints exist.** They will only be added together with Auth0 JWT validation and a role/permission check in the backend.
-- CORS allows `GET`, `HEAD`, `POST` and `OPTIONS`, with the `Content-Type` header, for the configured origins only.
+- **Public** (no authentication, ever; customers have no accounts): `/health*`, the catalogue endpoints, `GET /api/availability`, `POST /api/bookings`. These do not read the `Authorization` header.
+- **Protected**: everything under `/api/admin/*`. A plugin-wide `preHandler` runs `authenticate` (Bearer token → `jose` verification: RS256 signature against the cached remote JWKS, issuer, audience, exp/nbf) and then `requirePermission("admin:access")`.
+  - Authorization uses **only** the RBAC `permissions` claim: no e-mail, `sub` or role-name checks, and no fake or hardcoded tokens.
+  - The Auth0 `sub` is an opaque string. No users are stored in PostgreSQL.
+- `GET /api/admin/me` returns `{ data: { sub, permissions } }`: no token, no profile claims.
+- Errors: 401 `AUTHENTICATION_REQUIRED` / `AUTHENTICATION_INVALID` (with `WWW-Authenticate`), 403 `AUTHORIZATION_REQUIRED`, 503 `AUTHENTICATION_UNAVAILABLE` (JWKS unreachable or Auth0 not configured). Rejection reasons are logged as codes only, never returned.
+- `POST /api/bookings` is the only public write: the server computes price, duration, totals, status (`nieuw`), `start_at`/`end_at` and the cancel token. It is rate limited, Zod-validated, transactional and protected by the exclusion constraint.
+- CORS allows `GET`, `HEAD`, `POST` and `OPTIONS` with the `Content-Type` and `Authorization` headers, for the configured origins only; no cookies or credentials mode. The Auth0 host is not an API origin.
 
 ## Production notes
 
@@ -190,4 +201,5 @@ npm test        # node --test "test/**/*.test.ts"
 - **Rate limiting**: the limiter keeps its counters in process memory, per client IP.
   - That is fine for one API process. With several replicas every replica counts separately, so a shared store (e.g. Redis) is needed.
   - Behind the proxy, enable `trustProxy`; otherwise all clients share the proxy's IP and the limit applies to everyone together.
-- **Not production-ready yet**: no auth, no Docker image, and no parallel-race test on a real PostgreSQL. These are planned phases.
+- **Auth0**: set `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` (required in production) and complete `docs/AUTH0-SETUP.md`. The API only fetches Auth0's public keys; it needs outbound HTTPS to the Auth0 domain.
+- **Not production-ready yet**: no admin CRUD, no Docker image, and no parallel-race test on a real PostgreSQL. These are planned phases.

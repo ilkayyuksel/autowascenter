@@ -1,4 +1,12 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import {
+  Outlet,
+  Link,
+  createRootRoute,
+  HeadContent,
+  Scripts,
+  useLocation,
+} from "@tanstack/react-router";
+import { AdminAuthProvider } from "@/components/admin/AdminAuthProvider";
 import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
@@ -70,10 +78,21 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+const isAdminPath = (pathname: string) =>
+  pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/admin-login";
+
 function RootComponent() {
+  const { pathname } = useLocation();
   return (
     <>
-      <Outlet />
+      {/* Auth0 only for the admin area; the public site never loads or contacts Auth0. */}
+      {isAdminPath(pathname) ? (
+        <AdminAuthProvider>
+          <Outlet />
+        </AdminAuthProvider>
+      ) : (
+        <Outlet />
+      )}
       <Toaster richColors position="top-center" />
     </>
   );

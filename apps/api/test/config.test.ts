@@ -60,8 +60,50 @@ describe("loadConfig", () => {
       NODE_ENV: "production",
       DATABASE_URL: DB,
       CORS_ORIGIN: "https://autowascenter.be",
+      AUTH0_DOMAIN: "tenant.eu.auth0.com",
+      AUTH0_AUDIENCE: "https://api.autowascenter.be",
     });
     assert.equal(ok.isProduction, true);
+  });
+
+  test("Auth0: required in production, derived issuer and JWKS URL, optional in development", () => {
+    const prod = { NODE_ENV: "production", DATABASE_URL: DB, CORS_ORIGIN: "https://a.be" };
+    assert.throws(() => loadConfig(prod), /AUTH0_DOMAIN: required in production/);
+
+    const config = loadConfig({
+      ...prod,
+      AUTH0_DOMAIN: "tenant.eu.auth0.com",
+      AUTH0_AUDIENCE: "https://api.autowascenter.be",
+    });
+    assert.deepEqual(config.auth0, {
+      domain: "tenant.eu.auth0.com",
+      audience: "https://api.autowascenter.be",
+      issuer: "https://tenant.eu.auth0.com/",
+      jwksUrl: "https://tenant.eu.auth0.com/.well-known/jwks.json",
+    });
+
+    const custom = loadConfig({
+      ...prod,
+      AUTH0_DOMAIN: "login.autowascenter.be",
+      AUTH0_AUDIENCE: "x",
+      AUTH0_ISSUER: "https://login.autowascenter.be/",
+    });
+    assert.equal(custom.auth0?.issuer, "https://login.autowascenter.be/");
+
+    assert.equal(loadConfig({ DATABASE_URL: DB }).auth0, null);
+    assert.throws(
+      () => loadConfig({ DATABASE_URL: DB, AUTH0_DOMAIN: "tenant.eu.auth0.com" }),
+      /must be set together/,
+    );
+    assert.throws(
+      () =>
+        loadConfig({
+          DATABASE_URL: DB,
+          AUTH0_DOMAIN: "https://tenant.eu.auth0.com",
+          AUTH0_AUDIENCE: "x",
+        }),
+      /AUTH0_DOMAIN/,
+    );
   });
 
   test("error messages never contain configuration values", () => {

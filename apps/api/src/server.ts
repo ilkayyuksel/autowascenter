@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.ts";
+import { createAuth0Verifier } from "./auth/verifier.ts";
 import { loadConfig, type Config } from "./config/env.ts";
 import { createDb } from "./db/index.ts";
 
@@ -15,7 +16,11 @@ export async function startServer(config: Config = loadConfig()) {
     corsOrigins: config.corsOrigins,
     logLevel: config.logLevel,
     bookingRateLimit: config.bookingRateLimit,
+    tokenVerifier: config.auth0 ? createAuth0Verifier(config.auth0) : null,
   });
+  if (!config.auth0) {
+    app.log.warn("AUTH0_DOMAIN/AUTH0_AUDIENCE not set: admin endpoints answer 503");
+  }
 
   // Idle clients can error when the database restarts; log instead of crashing the process.
   pool.on("error", (err) => app.log.error({ err }, "idle database client error"));

@@ -10,8 +10,9 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 2: PostgreSQL-databaselaag (Drizzle)          | **Afgerond** (zie _Phase 2: database layer_)                                  |
 | Fase 3: API-skelet + publieke reads (Fastify)      | **Afgerond** (zie _Phase 3: public read API_)                                 |
 | Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                  |
-| Volgende fase                                      | **Auth0 authentication and backend authorization**                            |
-| Latere fases                                       | Niet gestart (admin-API, frontendmigratie, data, Docker, productie)           |
+| Fase 5: Auth0 authentication + authorization       | **Afgerond** (zie _Phase 5_); ⚠ admin-datapagina's werken pas weer na Fase 6  |
+| Volgende fase                                      | **Admin API and admin data migration**                                        |
+| Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)             |
 
 ## Phase 2: database layer
 
@@ -57,6 +58,42 @@ Specificatie: `docs/API-V1.md`. Regels en de mapping van oude naar nieuwe logica
   - Moet zondag gesloten zijn? `src/lib/site.ts` zegt ja, maar de database kent geen weekdagmodel.
 
 **Next phase: "Auth0 authentication and backend authorization"**
+
+## Phase 5 — Auth0 Authentication
+
+**Status: COMPLETE** (code en tests). Het Auth0-dashboard moet nog handmatig ingericht worden; zie `docs/AUTH0-SETUP.md`.
+
+Details: `docs/AUTH0-MIGRATION.md`.
+
+- **Frontend authentication**:
+  - `@auth0/auth0-react` 2.27.0, met één `Auth0Provider` die alleen op `/admin*`-paden en alleen in de browser gemount wordt. Publieke pagina's laden of contacteren Auth0 niet.
+  - Login gaat via Universal Login vanaf `/admin-login`; `/admin-login` is ook de callback. Uitloggen gebeurt via de Auth0-logout en keert terug naar `/`.
+  - Tokens staan in het geheugen van de SDK, met refresh-token-rotation. Er is geen eigen tokenopslag en geen client secret.
+  - De guard (`/admin`) is **alleen UX**. Hij vraagt `GET /api/admin/me` met het access token en toont een aparte status voor laden, niet geconfigureerd, opnieuw inloggen, geen toegang, fout en toegestaan. Daardoor kan de UI niet eindeloos blijven laden of in een redirect-lus terechtkomen.
+- **Backend JWT verification** (`apps/api/src/auth/`, `jose` 6.2.12):
+  - RS256 via de gecachte remote JWKS (`https://<AUTH0_DOMAIN>/.well-known/jwks.json`), met controle van issuer, audience, `exp`/`nbf` en `sub`.
+  - `AUTH0_DOMAIN` en `AUTH0_AUDIENCE` zijn verplicht in productie; `AUTH0_ISSUER` is optioneel.
+- **RBAC/permission**: alleen de permission `admin:access`, uit de `permissions`-claim, via de Auth0-rol `admin`. Er zijn geen checks op e-mail, `sub` of rolnaam.
+- **Protected endpoint**: `GET /api/admin/me` geeft `{ sub, permissions }` terug. De foutcodes zijn 401 `AUTHENTICATION_REQUIRED`/`AUTHENTICATION_INVALID`, 403 `AUTHORIZATION_REQUIRED` en 503 `AUTHENTICATION_UNAVAILABLE`.
+- **Publieke endpoints** (catalogus, availability, `POST /api/bookings`) blijven publiek. Aan de booking-logica is niets gewijzigd.
+- **Supabase auth status**:
+  - `signInWithPassword`, `getSession`, `onAuthStateChange`, `signOut` en de `user_roles`-query zijn uit de frontend verwijderd.
+  - `@supabase/supabase-js`, `src/integrations/supabase/` en de Supabase-database (inclusief `user_roles`) blijven bestaan, omdat de publieke frontend ze nog gebruikt.
+- **⚠ Bekende tussentoestand**:
+  - De admin-datapagina's (`src/routes/admin/*`) doen nog `supabase.from(...)`. Zonder Supabase-sessie draaien die als anon, waardoor RLS geen boekingen teruggeeft en schrijfacties weigert.
+  - Fase 6 verplaatst de admin-CRUD naar de eigen API.
+  - **Deze branch mag niet gedeployed of naar Lovable-`main` gemerged worden vóór Fase 6.**
+- **Manual Auth0 setup** (`docs/AUTH0-SETUP.md`):
+  - een SPA-applicatie en een API (RS256, RBAC aan, "Add Permissions in the Access Token" aan);
+  - de URL's voor `http://localhost:8080`, refresh-token-rotation, de permission `admin:access` en de rol `admin`;
+  - admin-gebruikers aanmaken en de rol toekennen; signups uitschakelen.
+- **Tests**:
+  - API: 124 tests, allemaal geslaagd. Daarvan zijn 16 nieuwe auth-tests; config ging van 6 naar 7.
+  - Frontend: `npm test` in de root, 11 tests, allemaal geslaagd.
+  - SSR-rooktest van publieke en admin-pagina's.
+  - Browserflows (redirect, callback, logout, refresh) zijn handmatig te testen; er is geen E2E-runner.
+
+**Next phase: "Admin API and admin data migration"**
 
 ## Current architecture
 

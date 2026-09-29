@@ -8,17 +8,17 @@ HTTP API of the self-hosted backend (`apps/api`).
 
 ## Conventions
 
-| Topic           | Convention                                                                                                                  |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Base path       | `/api`. Health endpoints live at `/health` and `/health/db`.                                                                |
-| Success         | `{ "data": … }`                                                                                                             |
-| Error           | `{ "error": { "code": "…", "message": "…" } }`. Never a stack trace, SQL or driver details.                                 |
-| Field names     | `snake_case`, the same as the columns the current frontend reads                                                            |
-| Money           | JSON numbers in euros, at most 2 decimals. Totals are computed server-side in integer cents.                                |
-| Dates and times | `YYYY-MM-DD` and `HH:MM` are local **Europe/Brussels** values. `*_at` fields are absolute ISO-8601 instants (UTC, `Z`).     |
-| Contracts       | Zod schemas: `packages/shared/src/booking.ts` (booking and availability) and `apps/api/src/contracts/public.ts` (catalogue) |
-| Authentication  | None yet; all endpoints are public. Admin endpoints come with Auth0 (next phase).                                           |
-| CORS            | Only the origins in `CORS_ORIGIN`; methods `GET, HEAD, POST, OPTIONS`; request header `Content-Type`                        |
+| Topic           | Convention                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base path       | `/api`. Health endpoints live at `/health` and `/health/db`.                                                                                            |
+| Success         | `{ "data": … }`                                                                                                                                         |
+| Error           | `{ "error": { "code": "…", "message": "…" } }`. Never a stack trace, SQL or driver details.                                                             |
+| Field names     | `snake_case`, the same as the columns the current frontend reads                                                                                        |
+| Money           | JSON numbers in euros, at most 2 decimals. Totals are computed server-side in integer cents.                                                            |
+| Dates and times | `YYYY-MM-DD` and `HH:MM` are local **Europe/Brussels** values. `*_at` fields are absolute ISO-8601 instants (UTC, `Z`).                                 |
+| Contracts       | Zod schemas: `packages/shared/src/booking.ts` (booking and availability) and `apps/api/src/contracts/public.ts` (catalogue)                             |
+| Authentication  | Public endpoints: none, ever. `/api/admin/*`: `Authorization: Bearer <Auth0 access token>` with the `admin:access` permission (see "GET /api/admin/me") |
+| CORS            | Only the origins in `CORS_ORIGIN`; methods `GET, HEAD, POST, OPTIONS`; request headers `Content-Type`, `Authorization`                                  |
 
 ## Endpoints
 
@@ -33,8 +33,41 @@ HTTP API of the self-hosted backend (`apps/api`).
 | GET    | `/api/vehicle-types/:vehicleTypeId/services` | Bookable options with price/duration for a type |
 | GET    | `/api/availability`                          | Free start times for a date and selection       |
 | POST   | `/api/bookings`                              | Create a booking                                |
+| GET    | `/api/admin/me`                              | **Protected** (`admin:access`): who am I        |
 
 The catalogue and health endpoints are unchanged from phase 3 and are documented in `apps/api/README.md`.
+
+---
+
+## GET /api/admin/me
+
+This endpoint exists to test authentication and authorization end to end. It is the only admin endpoint until phase 6.
+
+**Request**: `Authorization: Bearer <access token>`. The token must be an Auth0 **access token** for the API audience, never an ID token.
+
+The token must pass all of these checks:
+
+- RS256 signature against `https://<AUTH0_DOMAIN>/.well-known/jwks.json`;
+- `iss` = `https://<AUTH0_DOMAIN>/` (or `AUTH0_ISSUER`);
+- `aud` contains `AUTH0_AUDIENCE`;
+- not expired and not before `nbf` (5 s tolerance);
+- a `sub` claim is present;
+- the `permissions` claim contains `admin:access`.
+
+**200 response**. There is no token and no profile data in the response:
+
+```json
+{ "data": { "sub": "auth0|64f…", "permissions": ["admin:access"] } }
+```
+
+**Errors**:
+
+| Status | Code                         | When                                                                                                                                                                                   |
+| ------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 401    | `AUTHENTICATION_REQUIRED`    | No `Authorization` header (`WWW-Authenticate: Bearer`)                                                                                                                                 |
+| 401    | `AUTHENTICATION_INVALID`     | Malformed, bad signature, wrong issuer or audience, expired or not yet valid, wrong algorithm, no `sub`. The response carries one generic message; the reason is only logged as a code |
+| 403    | `AUTHORIZATION_REQUIRED`     | Valid token without `admin:access`                                                                                                                                                     |
+| 503    | `AUTHENTICATION_UNAVAILABLE` | Auth0 keys unreachable, or Auth0 not configured on the API (it is never open instead)                                                                                                  |
 
 ---
 

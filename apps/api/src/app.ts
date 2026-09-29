@@ -1,4 +1,6 @@
 import Fastify, { type FastifyServerOptions } from "fastify";
+import { registerAuth } from "./auth/plugin.ts";
+import type { TokenVerifier } from "./auth/verifier.ts";
 import type { Config } from "./config/env.ts";
 import type { Database } from "./db/index.ts";
 import { registerErrorHandling } from "./errors/error-handler.ts";
@@ -6,6 +8,7 @@ import { registerClock } from "./plugins/clock.ts";
 import { registerCors } from "./plugins/cors.ts";
 import { registerDatabase } from "./plugins/db.ts";
 import { registerRateLimit, type BookingRateLimit } from "./plugins/rate-limit.ts";
+import { adminRoutes } from "./routes/admin/index.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { bookingRoutes } from "./routes/public/bookings.ts";
 import { publicRoutes } from "./routes/public/index.ts";
@@ -15,8 +18,15 @@ export interface AppOptions {
   corsOrigins: Config["corsOrigins"];
   logLevel?: Config["logLevel"];
   bookingRateLimit?: BookingRateLimit;
+  /**
+   * Verifies Auth0 access tokens for /api/admin/*. null = Auth0 not configured: protected
+   * routes then answer 503 (they are never left open). Tests inject a local-key verifier.
+   */
+  tokenVerifier?: TokenVerifier | null;
   /** Injectable clock for tests; defaults to the system clock. */
   clock?: () => Date;
+  /** Test seam: where log lines go (defaults to stdout). */
+  logStream?: NodeJS.WritableStream;
 }
 
 const DEFAULT_BOOKING_RATE_LIMIT: BookingRateLimit = { max: 10, timeWindowMs: 60_000 };
@@ -30,25 +40,33 @@ export async function createApp({
   corsOrigins,
   logLevel = "info",
   bookingRateLimit = DEFAULT_BOOKING_RATE_LIMIT,
+  tokenVerifier = null,
   clock,
+  logStream,
 }: AppOptions) {
   const logger: FastifyServerOptions["logger"] = {
     level: logLevel,
-    // Never log credentials, even if a future client sends them.
+    // Never log credentials: bearer tokens and cookies are redacted if a serializer ever
+    // includes headers (the default request serializer does not).
     redact: ["req.headers.authorization", "req.headers.cookie", 'res.headers["set-cookie"]'],
+    ...(logStream ? { stream: logStream } : {}),
   };
 
   const app = Fastify({ logger });
 
   registerDatabase(app, db);
   registerClock(app, clock);
+  registerAuth(app, tokenVerifier);
   registerErrorHandling(app);
   await registerCors(app, corsOrigins);
   await registerRateLimit(app);
 
   await app.register(healthRoutes);
+  // Public: no authentication, ever (customers have no accounts).
   await app.register(publicRoutes, { prefix: "/api" });
   await app.register(bookingRoutes, { prefix: "/api", bookingRateLimit });
+  // Protected: valid Auth0 access token + admin:access permission.
+  await app.register(adminRoutes, { prefix: "/api/admin" });
 
   return app;
 }
