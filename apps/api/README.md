@@ -4,12 +4,13 @@
 
 Self-hosted backend for Autowascenter. It will take over all database access and business logic that the frontend currently performs directly against Supabase.
 
-**Current scope (phase 3):**
+**Current scope (phases 3–4):**
 
 - Health endpoints.
 - Read-only public endpoints for services, gallery, reviews, vehicle types and the bookable options per vehicle type.
+- **Server-side booking engine**: `GET /api/availability` and `POST /api/bookings`. Pricing, duration, opening hours, blocked periods and overlap protection all run on the server, in one transaction. See `docs/API-V1.md` and `docs/BOOKING-BUSINESS-LOGIC.md`.
 
-**Not included yet:** authentication, admin endpoints, creating bookings, pricing and availability engines.
+**Not included yet:** authentication, admin endpoints, cancellation, e-mail notifications.
 
 **The frontend does not use this API yet.** It still talks to Supabase directly.
 
@@ -31,17 +32,20 @@ src/
   app.ts             createApp(): builds Fastify (logger, errors, CORS, routes); never listens
   config/env.ts      loadConfig(): validated environment variables
   db/                createDb() (pg pool + Drizzle), pingDatabase(), schema/
-  contracts/         Zod request/response contracts of the public endpoints
+  contracts/         Zod contracts of the catalogue endpoints
+  lib/               business-time (Europe/Brussels), validate (Zod → 400)
   routes/health.ts   /health, /health/db
-  routes/public/     /api/* public GET endpoints
-  services/          catalog, gallery, reviews: all database queries
+  routes/public/     index.ts: catalogue GETs; bookings.ts: /availability, /bookings
+  services/          catalog, gallery, reviews; pricing, schedule (pure slot rules),
+                     availability, booking (transaction)
   errors/            AppError + central error handler
-  plugins/           db decoration (app.db), CORS
+  plugins/           db (app.db), clock (app.clock), CORS, rate limit
 drizzle/             SQL migrations (see "Database")
 test/                node:test suites (PGlite)
 ```
 
-- **Dependencies** (versions pinned exactly, locked in `package-lock.json`): `fastify` 5.12.5, `@fastify/cors` 11.3.0, `zod` 4.6.5, `drizzle-orm` 0.45.3, `pg` 8.23.0.
+- **Booking and availability contracts** (request schemas and response shapes) live in `packages/shared`. It is linked as `"@autowascenter/shared": "file:../../packages/shared"`, so there are no root workspaces. Validation uses `safeParse` (`lib/validate.ts`), so it does not depend on which zod copy a schema comes from.
+- **Dependencies** (versions pinned exactly, locked in `package-lock.json`): `fastify` 5.12.5, `@fastify/cors` 11.3.0, `@fastify/rate-limit` 11.2.0, `zod` 4.6.5, `drizzle-orm` 0.45.3, `pg` 8.23.0.
 - **Dev dependencies**: `drizzle-kit`, `typescript`, `@electric-sql/pglite`, `@types/*`.
 - **Execution**: Node ≥ 22.18 runs the TypeScript sources directly (built-in type stripping). There is no build step. `tsc --noEmit` does the type checking, and `erasableSyntaxOnly` keeps the code strippable.
 
@@ -49,14 +53,16 @@ test/                node:test suites (PGlite)
 
 See `.env.example`. `npm run dev` loads `.env` automatically (`--env-file-if-exists`); `npm start` reads only the real environment.
 
-| Variable       | Required              | Default                                      | Notes                                                                                                                    |
-| -------------- | --------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL` | yes                   | —                                            | Self-hosted PostgreSQL, **not** Supabase. Secret: never logged, never returned, never included in config error messages. |
-| `NODE_ENV`     | no                    | `development`                                | `development`, `test` or `production`                                                                                    |
-| `HOST`         | no                    | `127.0.0.1`                                  | Use `0.0.0.0` inside a container                                                                                         |
-| `PORT`         | no                    | `3001`                                       |                                                                                                                          |
-| `CORS_ORIGIN`  | **yes in production** | `http://localhost:8080` (outside production) | Comma-separated list of allowed browser origins. `*` is rejected in production.                                          |
-| `LOG_LEVEL`    | no                    | `info`                                       | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                                                           |
+| Variable                       | Required              | Default                                      | Notes                                                                                                                    |
+| ------------------------------ | --------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                 | yes                   | —                                            | Self-hosted PostgreSQL, **not** Supabase. Secret: never logged, never returned, never included in config error messages. |
+| `NODE_ENV`                     | no                    | `development`                                | `development`, `test` or `production`                                                                                    |
+| `HOST`                         | no                    | `127.0.0.1`                                  | Use `0.0.0.0` inside a container                                                                                         |
+| `PORT`                         | no                    | `3001`                                       |                                                                                                                          |
+| `CORS_ORIGIN`                  | **yes in production** | `http://localhost:8080` (outside production) | Comma-separated list of allowed browser origins. `*` is rejected in production.                                          |
+| `LOG_LEVEL`                    | no                    | `info`                                       | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                                                           |
+| `BOOKING_RATE_LIMIT_MAX`       | no                    | `10`                                         | Max `POST /api/bookings` requests per client IP per window                                                               |
+| `BOOKING_RATE_LIMIT_WINDOW_MS` | no                    | `60000`                                      | Rate-limit window in ms (≥ 1000)                                                                                         |
 
 Invalid configuration stops the process at startup with exit code 1 and names the invalid variables only.
 
@@ -93,7 +99,7 @@ No local PostgreSQL has been used so far. Everything was verified with PGlite (s
 
 ## Public endpoints
 
-All are under `/api`, public (no authentication) and read-only.
+All are under `/api` and public (no authentication). The catalogue endpoints are below. **`GET /api/availability` and `POST /api/bookings` are specified in `docs/API-V1.md`**, and their rules in `docs/BOOKING-BUSINESS-LOGIC.md`.
 
 **Conventions**
 
@@ -120,7 +126,7 @@ All are under `/api`, public (no authentication) and read-only.
 - The frontend currently filters `bookable && active` **in the browser**. This API applies the same filters in the database. It also returns 404 for inactive vehicle types; today the frontend never asks for those.
 - `title` order is PostgreSQL collation order. The frontend used `localeCompare`; results can differ only for accents and case.
 
-**Packages**: there is no separate packages endpoint, because the frontend does not need package data on its own. The booking flow only shows which services a package contains (`includes`, step 2). That is embedded in the vehicle-type services response, with the same semantics as today: the titles of the **active** contained services. Nothing else about packages is implemented. If later steps need package data (for example pricing validation or preventing double counting of a package plus an included service), that belongs to the booking/pricing phase.
+**Packages**: there is no separate packages endpoint, because the frontend does not need package data on its own. The booking flow only shows which services a package contains (`includes`, step 2). That is embedded in the vehicle-type services response, with the same semantics as today: the titles of the **active** contained services. For pricing, a package is an ordinary service with its own price (phase 4, `docs/BOOKING-BUSINESS-LOGIC.md` §3).
 
 **Error codes**
 
@@ -141,13 +147,18 @@ Responses never contain stack traces, SQL or driver messages.
 npm test        # node --test "test/**/*.test.ts"
 ```
 
-| Suite                 | What                                                                                                                                                                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `test/schema.test.ts` | Migrations, overlap exclusion, FKs, CHECKs, triggers (26 tests)                                                                                                                                                                                                    |
-| `test/api.test.ts`    | Every endpoint through `app.inject()`: response shape (strict Zod contract), empty results, filters, ordering, `limit`, 400/404, CORS, **unreachable PostgreSQL** (real `pg` pool on a closed port → 503, no leaked details), unexpected DB error → 500 (19 tests) |
-| `test/config.test.ts` | Defaults, CORS rules, production requirements, no secrets in errors (5 tests)                                                                                                                                                                                      |
+| Suite                         | What                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test/schema.test.ts`         | Migrations, overlap exclusion, FKs, CHECKs, triggers (26 tests)                                                                                                                                                                                                                                                                                                                                                           |
+| `test/api.test.ts`            | Every endpoint through `app.inject()`: response shape (strict Zod contract), empty results, filters, ordering, `limit`, 400/404, CORS, **unreachable PostgreSQL** (real `pg` pool on a closed port → 503, no leaked details), unexpected DB error → 500 (19 tests)                                                                                                                                                        |
+| `test/config.test.ts`         | Defaults, CORS rules, production requirements, rate-limit settings, no secrets in errors (6 tests)                                                                                                                                                                                                                                                                                                                        |
+| `test/business-logic.test.ts` | Pure rules: Europe/Brussels conversion incl. both DST days, slot grid, multi-day segments, blocked periods, cents and VAT rounding (15 tests)                                                                                                                                                                                                                                                                             |
+| `test/booking-engine.test.ts` | Pricing (single, several, package, package + extra/included, vehicle types, catalogue change/snapshot, invalid/inactive/unavailable), availability (free, booked, cancelled, blocked, opening hours, multi-day, adjacent, overlap start/end/contained, today/past, DST), booking creation, **concurrency** (two simultaneous bookings → 1 success + 1 conflict), exclusion-constraint fallback → 409, rollback (28 tests) |
+| `test/bookings-api.test.ts`   | HTTP: availability and booking contracts, validation, rejected client-supplied totals/status/token, 404/409/422, concurrent POSTs, CORS preflight, rate limit 429, database failure (13 tests)                                                                                                                                                                                                                            |
 
-**PGlite** (`@electric-sql/pglite`, dev only) is the real PostgreSQL engine compiled to WASM, running in-process with `btree_gist`. `test/helpers/test-db.ts` applies all migrations from `drizzle/`, so the tests run against the production schema. No external database, Docker or production data is used. The unreachable-database test is the only one that uses the `pg` driver; it needs no running server.
+**PGlite** (`@electric-sql/pglite`, dev only) is the real PostgreSQL engine compiled to WASM, running in-process with `btree_gist`. `test/helpers/test-db.ts` applies all migrations from `drizzle/`, so the tests run against the production schema. No external database, Docker or production data is used. The unreachable-database tests are the only ones that use the `pg` driver; they need no running server.
+
+**Concurrency on PGlite**: PGlite has a single connection, so concurrent transactions run one after the other. The "two simultaneous bookings" tests therefore prove that the second request is rejected, not a true parallel race. The race itself is covered separately: a test inserts a conflicting booking past the pre-check, and the **exclusion constraint** rejects it (SQLSTATE `23P01` → 409). On a real multi-connection PostgreSQL, that constraint is what stops the second of two truly parallel transactions. A parallel test against a real PostgreSQL is still to be added once a test database or container exists.
 
 ## Database
 
@@ -162,9 +173,12 @@ npm test        # node --test "test/**/*.test.ts"
 **Auth0 is added in a later phase.**
 
 - There is no authentication of any kind yet: no Auth0, no fake or temporary tokens, no hardcoded admin credentials.
-- All current endpoints are public reads of data that Supabase RLS already exposes to anonymous users. The API is stricter: it filters inactive and unavailable rows and does not expose `blocked_periods.reason` or `site_settings`.
-- **No admin or write endpoints exist.** They will only be added together with Auth0 JWT validation and a role/permission check in the backend.
-- CORS only allows `GET`, `HEAD` and `OPTIONS`.
+- The catalogue endpoints are public reads of data that Supabase RLS already exposes to anonymous users. The API is stricter: it filters inactive and unavailable rows and does not expose `blocked_periods.reason` or `site_settings`.
+- **The only write endpoint is the public `POST /api/bookings`.**
+  - The client sends only choices and customer data. The server computes price, duration, totals, status (`nieuw`), `start_at`/`end_at`, and the cancel token (DB default).
+  - It is rate limited and validated with Zod, runs in one transaction, and is protected by the exclusion constraint.
+- **No admin endpoints exist.** They will only be added together with Auth0 JWT validation and a role/permission check in the backend.
+- CORS allows `GET`, `HEAD`, `POST` and `OPTIONS`, with the `Content-Type` header, for the configured origins only.
 
 ## Production notes
 
@@ -173,4 +187,7 @@ npm test        # node --test "test/**/*.test.ts"
 - **Behind the reverse proxy** (Caddy, later phase): TLS terminates at the proxy. Enabling Fastify `trustProxy` for correct client IPs in the logs is still to do. Map `/health` to liveness and `/health/db` to readiness.
 - **Logs**: JSON (pino) on stdout. The `authorization` and `cookie` headers are redacted, and `DATABASE_URL` is never logged.
 - **Shutdown**: on `SIGTERM`/`SIGINT` the server stops accepting requests, finishes in-flight ones and closes the pool.
-- **Not production-ready yet**: no rate limiting, no auth, no Docker image. These are planned phases.
+- **Rate limiting**: the limiter keeps its counters in process memory, per client IP.
+  - That is fine for one API process. With several replicas every replica counts separately, so a shared store (e.g. Redis) is needed.
+  - Behind the proxy, enable `trustProxy`; otherwise all clients share the proxy's IP and the limit applies to everyone together.
+- **Not production-ready yet**: no auth, no Docker image, and no parallel-race test on a real PostgreSQL. These are planned phases.

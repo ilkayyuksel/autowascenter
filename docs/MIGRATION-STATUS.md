@@ -2,14 +2,16 @@
 
 Migratie van het Lovable/Supabase-project naar een self-hosted platform met Docker Compose.
 
-| Fase                                          | Status                                                                                            |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Fase 0: beveiligen + baseline                 | **Afgerond** (zie _Completed_)                                                                    |
-| Fase 0.5: reproduceerbare baseline            | **Afgerond** (zie _Baseline v1_)                                                                  |
-| Fase 1: Supabase database-inventaris          | **Afgerond** (`docs/DATABASE-INVENTORY.md`, `docs/DATABASE-MIGRATION-MAP.md`)                     |
-| Fase 2: PostgreSQL-databaselaag (Drizzle)     | **Afgerond** (zie _Phase 2: database layer_)                                                      |
-| Fase 3: API-skelet + publieke reads (Fastify) | **Afgerond** (zie _Phase 3: public read API_)                                                     |
-| Volgende fases                                | Niet gestart (booking/availability server-side, Auth0 + admin, frontend, data, Docker, productie) |
+| Fase                                               | Status                                                                        |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Fase 0: beveiligen + baseline                      | **Afgerond** (zie _Completed_)                                                |
+| Fase 0.5: reproduceerbare baseline                 | **Afgerond** (zie _Baseline v1_)                                              |
+| Fase 1: Supabase database-inventaris               | **Afgerond** (`docs/DATABASE-INVENTORY.md`, `docs/DATABASE-MIGRATION-MAP.md`) |
+| Fase 2: PostgreSQL-databaselaag (Drizzle)          | **Afgerond** (zie _Phase 2: database layer_)                                  |
+| Fase 3: API-skelet + publieke reads (Fastify)      | **Afgerond** (zie _Phase 3: public read API_)                                 |
+| Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                  |
+| Volgende fase                                      | **Auth0 authentication and backend authorization**                            |
+| Latere fases                                       | Niet gestart (admin-API, frontendmigratie, data, Docker, productie)           |
 
 ## Phase 2: database layer
 
@@ -27,6 +29,34 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 - **Structuur**: route → Zod-validatie → service (Drizzle, expliciete kolommen) → `{ data }`; `createApp()` (zonder poort) los van `startServer()` (één pool per proces, graceful shutdown).
 - **Getest**: 50 tests (26 schema, 19 API via `app.inject()` op PGlite, 5 config), plus een handmatige rooktest van `npm start` (health, 503 bij onbereikbare DB, CORS, geen secrets in logs).
 - **Bewust niet**: Auth0/admin, schrijfendpoints, boekingen, pricing- en availability-engine, aparte packages-endpoint (pakketinhoud zit als `includes` in de vehicle-type-services-response), frontendkoppeling. De frontend gebruikt nog steeds uitsluitend Supabase.
+
+## Phase 4 — Server-side booking, pricing and availability
+
+**Status: COMPLETE**
+
+Specificatie: `docs/API-V1.md`. Regels en de mapping van oude naar nieuwe logica: `docs/BOOKING-BUSINESS-LOGIC.md`.
+
+- **Pricing moved server-side**:
+  - Prijs en duur komen uitsluitend uit `vehicle_type_services` in PostgreSQL. Een pakket is een gewone dienst met een eigen prijs, zoals nu.
+  - Bedragen worden in centen berekend; btw is 21 % (half-up) en wordt alleen in de response teruggegeven.
+  - `bookings.total_price` blijft excl. btw. De locatievergoeding blijft 0 (dat is het huidige gedrag), maar zit wel in één functie die later een echte berekening kan krijgen.
+  - De client stuurt geen prijs, totaal, duur, status of token; stuurt hij die toch, dan volgt een 400.
+- **Availability moved server-side** (`GET /api/availability`): hetzelfde slotalgoritme als `src/lib/slots.ts`, met drie bewuste correcties:
+  - alle boekingen zijn zichtbaar (de frontend zag er door RLS geen);
+  - boekingen en blokkades op de volgende dagen van een meerdaagse job tellen mee;
+  - "vandaag" wordt in Europe/Brussels bepaald in plaats van in UTC.
+- **Booking creation** (`POST /api/bookings`): een Zod-contract in `packages/shared`, status altijd `nieuw`, `cancel_token` via de DB-default, en snapshots in `booking_services`. De legacy-kolommen worden gevuld zoals de frontend dat doet.
+- **Transaction behavior**: selectie, prijs, slotvalidatie, controle op blokkades en overlap, en beide inserts zitten in één transactie. Elke fout rolt alles terug; dat is getest.
+- **Overlap protection**: een pre-check in de transactie plus de exclusion constraint `bookings_no_overlap_excl`. SQLSTATE `23P01` wordt `409 BOOKING_SLOT_UNAVAILABLE`, zonder PostgreSQL-details in de response.
+- **Tests**: 107 tests in `apps/api`, allemaal geslaagd: schema 26, catalogus-API 19, config 6, pure logica 15, engine 28, booking-API 13. Er is geen parallelle race-test tegen een echte PostgreSQL, omdat PGlite maar één verbinding heeft; zie `apps/api/README.md`.
+- **Rate limiting**: `@fastify/rate-limit` op `POST /api/bookings` (standaard 10 per 60 s per IP), instelbaar via `BOOKING_RATE_LIMIT_MAX` en `BOOKING_RATE_LIMIT_WINDOW_MS`. De tellers staan in het procesgeheugen; bij meerdere replicas is een gedeelde store nodig, en achter de proxy moet `trustProxy` aan.
+- **Idempotency**: niet toegevoegd, en er is geen nieuwe kolom. Een dubbele submit van de huidige frontend (snelle dubbelklik) mikt op hetzelfde slot, zodat de tweede request een 409 krijgt van de overlapbescherming.
+- **Frontend status**: **NOT MIGRATED**. De frontend gebruikt nog steeds Supabase. `src/routes/reservatie.tsx` en `src/lib/slots.ts` zijn ongewijzigd, en Supabase is niet verwijderd.
+- **Open business-beslissingen** (gedocumenteerd, niet stilzwijgend opgelost):
+  - Moet een pakket plus een dienst die het pakket al bevat geweigerd of ontdubbeld worden? Nu worden beide aangerekend.
+  - Moet zondag gesloten zijn? `src/lib/site.ts` zegt ja, maar de database kent geen weekdagmodel.
+
+**Next phase: "Auth0 authentication and backend authorization"**
 
 ## Current architecture
 

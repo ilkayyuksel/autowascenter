@@ -10,7 +10,12 @@ import { createDb } from "./db/index.ts";
  */
 export async function startServer(config: Config = loadConfig()) {
   const { db, pool } = createDb(config.databaseUrl);
-  const app = await createApp({ db, corsOrigins: config.corsOrigins, logLevel: config.logLevel });
+  const app = await createApp({
+    db,
+    corsOrigins: config.corsOrigins,
+    logLevel: config.logLevel,
+    bookingRateLimit: config.bookingRateLimit,
+  });
 
   // Idle clients can error when the database restarts; log instead of crashing the process.
   pool.on("error", (err) => app.log.error({ err }, "idle database client error"));

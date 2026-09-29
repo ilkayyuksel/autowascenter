@@ -12,6 +12,9 @@ const envSchema = z
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),
+    /** POST /api/bookings: max requests per client IP per window. */
+    BOOKING_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
+    BOOKING_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(60_000),
   })
   .transform((env, ctx) => {
     const rawOrigins = env.CORS_ORIGIN ?? (env.NODE_ENV === "production" ? "" : DEV_CORS_ORIGIN);
@@ -41,6 +44,10 @@ const envSchema = z
       port: env.PORT,
       corsOrigins,
       logLevel: env.LOG_LEVEL,
+      bookingRateLimit: {
+        max: env.BOOKING_RATE_LIMIT_MAX,
+        timeWindowMs: env.BOOKING_RATE_LIMIT_WINDOW_MS,
+      },
     };
   });
 

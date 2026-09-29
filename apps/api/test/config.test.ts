@@ -27,6 +27,25 @@ describe("loadConfig", () => {
     ]);
   });
 
+  test("booking rate limit is configurable, with safe defaults", () => {
+    assert.deepEqual(loadConfig({ DATABASE_URL: DB }).bookingRateLimit, {
+      max: 10,
+      timeWindowMs: 60_000,
+    });
+    assert.deepEqual(
+      loadConfig({
+        DATABASE_URL: DB,
+        BOOKING_RATE_LIMIT_MAX: "3",
+        BOOKING_RATE_LIMIT_WINDOW_MS: "120000",
+      }).bookingRateLimit,
+      { max: 3, timeWindowMs: 120_000 },
+    );
+    assert.throws(
+      () => loadConfig({ DATABASE_URL: DB, BOOKING_RATE_LIMIT_MAX: "0" }),
+      /BOOKING_RATE_LIMIT_MAX/,
+    );
+  });
+
   test("requires DATABASE_URL", () => {
     assert.throws(() => loadConfig({}), /DATABASE_URL/);
   });
