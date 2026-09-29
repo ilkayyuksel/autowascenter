@@ -1,5 +1,30 @@
+# Secrets / environment configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.dev.vars
+.dev.vars.*
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+.output/
+.vinxi/
+.nitro/
+.tanstack/**
+
+# Test / coverage
+coverage/
+*.lcov
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,24 +32,24 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-.output
-.vinxi
-.tanstack/**
-.nitro
+# Runtime data
+uploads/
+backups/
+*.dump
+*.sql.gz
+
+# Local overrides
 *.local
 
 # Wrangler / Cloudflare
 .wrangler/
-.dev.vars
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj

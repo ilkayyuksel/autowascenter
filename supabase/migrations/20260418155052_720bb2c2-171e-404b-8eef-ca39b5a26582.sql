@@ -20,7 +20,9 @@ BEGIN
       'authenticated',
       'authenticated',
       'admin@autowascenter.be',
-      crypt('Autowas2026!', gen_salt('bf')),
+      -- SECURITY: plaintext wachtwoord verwijderd. Bij een nieuwe DB krijgt het account
+      -- een willekeurig, onbekend wachtwoord; stel het in via een wachtwoordreset.
+      crypt(gen_random_uuid()::text, gen_salt('bf')),
       now(), now(), now(),
       '{"provider":"email","providers":["email"]}',
       '{}',

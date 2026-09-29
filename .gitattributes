@@ -1,0 +1,17 @@
+# Normaliseer alle tekstbestanden naar LF, in de repository én in de working tree
+# (ook op Windows met core.autocrlf=true). Vereist voor Prettier (endOfLine: lf) en Docker-builds.
+* text=auto eol=lf
+
+# Binaire bestanden: nooit converteren of diffen als tekst
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.lockb binary
