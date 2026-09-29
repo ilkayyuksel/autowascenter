@@ -2,12 +2,31 @@
 
 Migratie van het Lovable/Supabase-project naar een self-hosted platform met Docker Compose.
 
-| Fase                                    | Status                           |
-| --------------------------------------- | -------------------------------- |
-| Fase 0: beveiligen + baseline           | **Afgerond** (zie _Completed_)   |
-| Fase 0.5: reproduceerbare baseline      | **Afgerond** (zie _Baseline v1_) |
-| Fase 1: data-access-laag in de frontend | Niet gestart                     |
-| Fase 2–11                               | Niet gestart                     |
+| Fase                                          | Status                                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Fase 0: beveiligen + baseline                 | **Afgerond** (zie _Completed_)                                                                    |
+| Fase 0.5: reproduceerbare baseline            | **Afgerond** (zie _Baseline v1_)                                                                  |
+| Fase 1: Supabase database-inventaris          | **Afgerond** (`docs/DATABASE-INVENTORY.md`, `docs/DATABASE-MIGRATION-MAP.md`)                     |
+| Fase 2: PostgreSQL-databaselaag (Drizzle)     | **Afgerond** (zie _Phase 2: database layer_)                                                      |
+| Fase 3: API-skelet + publieke reads (Fastify) | **Afgerond** (zie _Phase 3: public read API_)                                                     |
+| Volgende fases                                | Niet gestart (booking/availability server-side, Auth0 + admin, frontend, data, Docker, productie) |
+
+## Phase 2: database layer
+
+- **Waar**: `apps/api` (standalone npm-package) en `packages/shared` (standalone, minimaal). Geen root-workspaces; root `package.json`/`package-lock.json` zijn ongewijzigd.
+- **Stack**: PostgreSQL, `drizzle-orm` 0.45.3, `pg` 8.23.0, `drizzle-kit` 0.31.11, TypeScript 5.9.3 (Node ≥ 22.18, ingebouwde type stripping). Tests: `@electric-sql/pglite` 0.5.8 (PostgreSQL in WASM, alleen dev).
+- **Migraties**: `apps/api/drizzle/0000_initial_schema.sql` (gegenereerd) en `0001_booking_integrity.sql` (handgeschreven: `btree_gist`, exclusion constraint `bookings_no_overlap_excl`, `updated_at`-triggers).
+- **Getest**: 26 integratietests op PGlite (migraties, overlap, FK-gedrag, CHECK's, singleton, trigger). **Niet** uitgevoerd tegen een echte PostgreSQL-server of tegen Supabase.
+- **Beslissingen**: `vehicle_type_id` ON DELETE RESTRICT; geen `user_roles`/`admin_users`; `services.price`/`duration_minutes` behouden als **LEGACY**; **DEFERRED BUSINESS DECISION**: openingsuren per weekdag (voorlopig één venster via `site_settings`).
+- **Details**: `apps/api/README.md`.
+
+## Phase 3: public read API
+
+- **Stack**: Fastify 5.12.5, `@fastify/cors` 11.3.0, zod 4.6.5 (exact vastgepind in `apps/api/package-lock.json`). Draait direct op Node ≥ 22.18 (`npm run dev` / `npm start`), typecheck via `tsc --noEmit`.
+- **Endpoints**: `GET /health` (liveness), `GET /health/db` (readiness, 503 bij DB-uitval), `GET /api/services`, `/api/gallery`, `/api/reviews`, `/api/vehicle-types`, `/api/vehicle-types/:vehicleTypeId/services`. Responses `{ data }` / `{ error: { code, message } }`, velden in snake_case zoals de huidige frontend.
+- **Structuur**: route → Zod-validatie → service (Drizzle, expliciete kolommen) → `{ data }`; `createApp()` (zonder poort) los van `startServer()` (één pool per proces, graceful shutdown).
+- **Getest**: 50 tests (26 schema, 19 API via `app.inject()` op PGlite, 5 config), plus een handmatige rooktest van `npm start` (health, 503 bij onbereikbare DB, CORS, geen secrets in logs).
+- **Bewust niet**: Auth0/admin, schrijfendpoints, boekingen, pricing- en availability-engine, aparte packages-endpoint (pakketinhoud zit als `includes` in de vehicle-type-services-response), frontendkoppeling. De frontend gebruikt nog steeds uitsluitend Supabase.
 
 ## Current architecture
 

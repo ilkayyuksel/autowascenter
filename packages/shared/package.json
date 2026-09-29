@@ -1,0 +1,19 @@
+{
+  "name": "@autowascenter/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared contracts (validation schemas, API/booking/pricing/availability types) for Autowascenter.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
