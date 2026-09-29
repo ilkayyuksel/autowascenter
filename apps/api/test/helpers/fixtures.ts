@@ -79,16 +79,27 @@ export type Catalog = Awaited<ReturnType<typeof seedCatalog>>;
 /** Inserts a booking directly (bypassing the API) occupying [start, end) local times. */
 export async function insertBookingAt(
   db: Database,
-  opts: { date: string; time: string; endDate?: string; endTime: string; status?: string },
+  opts: {
+    date: string;
+    time: string;
+    endDate?: string;
+    endTime: string;
+    status?: string;
+    totalPrice?: string;
+    customerName?: string;
+    serviceTitle?: string;
+  },
 ) {
   const startAt = new Date(localIso(opts.date, opts.time));
   const endAt = new Date(localIso(opts.endDate ?? opts.date, opts.endTime));
   const [row] = await db
     .insert(schema.bookings)
     .values({
-      customerName: "Bestaand",
+      customerName: opts.customerName ?? "Bestaand",
       customerEmail: "bestaand@example.com",
       customerPhone: "0470000000",
+      serviceTitle: opts.serviceTitle ?? null,
+      totalPrice: opts.totalPrice ?? "0",
       preferredDate: opts.date,
       preferredTime: opts.time,
       startAt,

@@ -4,14 +4,15 @@
 
 Self-hosted backend for Autowascenter. It will take over all database access and business logic that the frontend currently performs directly against Supabase.
 
-**Current scope (phases 3–5):**
+**Current scope (phases 3–6A):**
 
 - Health endpoints.
 - Read-only public endpoints for services, gallery, reviews, vehicle types and the bookable options per vehicle type.
 - **Server-side booking engine**: `GET /api/availability` and `POST /api/bookings`. Pricing, duration, opening hours, blocked periods and overlap protection all run on the server, in one transaction. See `docs/API-V1.md` and `docs/BOOKING-BUSINESS-LOGIC.md`.
-- **Auth0 authentication and authorization** (phase 5): JWT validation against the Auth0 JWKS plus RBAC permission checks. The only protected endpoint so far is `GET /api/admin/me`. See `docs/AUTH0-MIGRATION.md` and `docs/AUTH0-SETUP.md`.
+- **Auth0 authentication and authorization** (phase 5): JWT validation against the Auth0 JWKS plus RBAC permission checks. See `docs/AUTH0-MIGRATION.md` and `docs/AUTH0-SETUP.md`.
+- **Admin read API** (phase 6A): dashboard, bookings (paginated) and booking detail, agenda, services, vehicle types with the pricing matrix, blocked periods, settings, gallery. All require `admin:access`. See `docs/ADMIN-API.md`.
 
-**Not included yet:** admin CRUD (phase 6), cancellation, e-mail notifications.
+**Not included yet:** admin writes (phase 6B), uploads, cancellation, e-mail notifications.
 
 **The frontend does not use this API yet.** It still talks to Supabase directly.
 
@@ -37,7 +38,11 @@ src/
   lib/               business-time (Europe/Brussels), validate (Zod → 400)
   routes/health.ts   /health, /health/db
   routes/public/     index.ts: catalogue GETs; bookings.ts: /availability, /bookings
-  routes/admin/      /api/admin/*: every route requires admin:access
+  routes/admin/      /api/admin/*: every route requires admin:access (index.ts hooks);
+                     read.ts: admin read endpoints
+  services/admin/    dashboard, bookings (list/detail/agenda), catalog (services,
+                     vehicle types, gallery, blocked periods, settings)
+  contracts/admin.ts strict Zod contracts of the admin responses
   auth/              verifier (jose, JWKS, RS256), principal, plugin
                      (authenticate + requirePermission)
   services/          catalog, gallery, reviews; pricing, schedule (pure slot rules),
@@ -165,6 +170,7 @@ npm test        # node --test "test/**/*.test.ts"
 | `test/booking-engine.test.ts` | Pricing (single, several, package, package + extra/included, vehicle types, catalogue change/snapshot, invalid/inactive/unavailable), availability (free, booked, cancelled, blocked, opening hours, multi-day, adjacent, overlap start/end/contained, today/past, DST), booking creation, **concurrency** (two simultaneous bookings → 1 success + 1 conflict), exclusion-constraint fallback → 409, rollback (28 tests) |
 | `test/bookings-api.test.ts`   | HTTP: availability and booking contracts, validation, rejected client-supplied totals/status/token, 404/409/422, concurrent POSTs, CORS preflight, rate limit 429, database failure (13 tests)                                                                                                                                                                                                                            |
 | `test/auth.test.ts`           | Auth0 JWT validation without a real tenant (RSA keys generated per run, local and HTTP JWKS): missing, malformed, bad-signature, tampered, wrong-issuer, wrong-audience, expired, not-yet-valid, HS256/`none`, no-`sub` tokens → 401; no permission → 403; `admin:access` → 200 with only `sub`/`permissions`; public endpoints stay public; unconfigured / JWKS down → 503; CORS; **no tokens in logs** (16 tests)       |
+| `test/admin-read.test.ts`     | Admin read API: auth matrix (no/invalid token → 401, no permission → 403 even with role/e-mail claims, admin → 200) for all 9 endpoints; 400 for bad or unknown parameters; 404 for unknown bookings; strict contracts; data: dashboard aggregates, pagination, detail with snapshots and no `cancel_token`, multi-day agenda, catalogue, pricing matrix, settings (missing → 500), gallery (19 tests)                    |
 
 **PGlite** (`@electric-sql/pglite`, dev only) is the real PostgreSQL engine compiled to WASM, running in-process with `btree_gist`. `test/helpers/test-db.ts` applies all migrations from `drizzle/`, so the tests run against the production schema. No external database, Docker or production data is used. The unreachable-database tests are the only ones that use the `pg` driver; they need no running server.
 

@@ -11,7 +11,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 3: API-skelet + publieke reads (Fastify)      | **Afgerond** (zie _Phase 3: public read API_)                                 |
 | Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                  |
 | Fase 5: Auth0 authentication + authorization       | **Afgerond** (zie _Phase 5_); ⚠ admin-datapagina's werken pas weer na Fase 6  |
-| Volgende fase                                      | **Admin API and admin data migration**                                        |
+| Fase 6A: admin-API read-side                       | **Afgerond** (zie _Phase 6A_); frontend nog niet aangesloten                  |
+| Volgende fase                                      | **Admin API write-side and transactions** (6B)                                |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)             |
 
 ## Phase 2: database layer
@@ -94,6 +95,29 @@ Details: `docs/AUTH0-MIGRATION.md`.
   - Browserflows (redirect, callback, logout, refresh) zijn handmatig te testen; er is geen E2E-runner.
 
 **Next phase: "Admin API and admin data migration"**
+
+## Phase 6A — Admin API read-side
+
+**Status: COMPLETE**
+
+Specificatie: `docs/ADMIN-API.md`. Mapping per bestaande admin-query: `docs/ADMIN-MIGRATION-MAP.md`.
+
+- **Endpoints**: `GET /api/admin/dashboard`, `/bookings`, `/bookings/:id`, `/agenda?start=&end=`, `/services`, `/vehicle-types`, `/blocked-periods`, `/settings`, `/gallery` (plus `/me` uit Fase 5).
+  - Er is **geen** `/api/admin/reviews`: de huidige UI heeft geen reviewbeheer (`admin/reviews.tsx` is alleen een redirect).
+- **Authorization**:
+  - Twee `preHandler`-hooks op het admin-parent-plugin gelden voor elke route: een geldig Auth0-access-token (anders 401) en de permission `admin:access` (anders 403).
+  - Er zijn geen checks op e-mail, `sub`, rolnaam of `user_roles`.
+  - Onbekende queryparameters geven een 400.
+- **Pagination**: alleen voor boekingen (`page`, `limit` met standaard 50 en maximum 100), in SQL via `LIMIT`/`OFFSET` met een stabiele sortering. `meta` bevat `{ page, limit, total, total_pages }`. De andere collecties zijn klein en krijgen `meta.total`.
+- **Contracten**: strikte Zod-schema's, dus er lekken geen onverwachte velden. `cancel_token` wordt nooit teruggegeven; dat is getest.
+- **Dashboard**: `COUNT`, `SUM` en `GROUP BY` in PostgreSQL. De omzet is exclusief btw. "Vandaag" en "deze week" worden in Europe/Brussels bepaald.
+- **Agenda**: toont boekingen van alle statussen waarvan het bereik `[start_at, end_at)` overlapt met de gevraagde periode, dus ook de latere dagen van meerdaagse boekingen, plus de blokkades. Het bereik is maximaal 62 dagen.
+- **Tests**:
+  - `apps/api`: 143 tests, allemaal geslaagd. Daarvan zijn 19 nieuwe admin-read-tests: de auth-matrix (401/401/403/200) voor alle 9 endpoints, 400/404, strikte contracten, en de data (aggregaten, paginering, detail, meerdaagse agenda, catalogus, settings, galerij).
+  - Frontend: 11 tests, allemaal geslaagd.
+- **Frontend status**: **NOT MIGRATED**. De admin-frontend gebruikt nog Supabase en werkt sinds Fase 5 zonder Supabase-sessie niet voor data; zie de waarschuwing bij Phase 5.
+
+**Next phase: "Admin API write-side and transactions"**
 
 ## Current architecture
 

@@ -22,18 +22,29 @@ HTTP API of the self-hosted backend (`apps/api`).
 
 ## Endpoints
 
-| Method | Path                                         | Purpose                                         |
-| ------ | -------------------------------------------- | ----------------------------------------------- |
-| GET    | `/health`                                    | Liveness                                        |
-| GET    | `/health/db`                                 | Readiness (database)                            |
-| GET    | `/api/services`                              | Active services (catalogue)                     |
-| GET    | `/api/gallery`                               | Gallery items                                   |
-| GET    | `/api/reviews`                               | Approved reviews                                |
-| GET    | `/api/vehicle-types`                         | Active vehicle types                            |
-| GET    | `/api/vehicle-types/:vehicleTypeId/services` | Bookable options with price/duration for a type |
-| GET    | `/api/availability`                          | Free start times for a date and selection       |
-| POST   | `/api/bookings`                              | Create a booking                                |
-| GET    | `/api/admin/me`                              | **Protected** (`admin:access`): who am I        |
+| Method | Path                                         | Purpose                                              |
+| ------ | -------------------------------------------- | ---------------------------------------------------- |
+| GET    | `/health`                                    | Liveness                                             |
+| GET    | `/health/db`                                 | Readiness (database)                                 |
+| GET    | `/api/services`                              | Active services (catalogue)                          |
+| GET    | `/api/gallery`                               | Gallery items                                        |
+| GET    | `/api/reviews`                               | Approved reviews                                     |
+| GET    | `/api/vehicle-types`                         | Active vehicle types                                 |
+| GET    | `/api/vehicle-types/:vehicleTypeId/services` | Bookable options with price/duration for a type      |
+| GET    | `/api/availability`                          | Free start times for a date and selection            |
+| POST   | `/api/bookings`                              | Create a booking                                     |
+| GET    | `/api/admin/me`                              | **Protected** (`admin:access`): who am I             |
+| GET    | `/api/admin/dashboard`                       | **Protected**: counts, week revenue, today, next     |
+| GET    | `/api/admin/bookings?page=&limit=`           | **Protected**: paginated bookings                    |
+| GET    | `/api/admin/bookings/:id`                    | **Protected**: booking detail + service lines        |
+| GET    | `/api/admin/agenda?start=&end=`              | **Protected**: bookings + blocked periods in a range |
+| GET    | `/api/admin/services`                        | **Protected**: full catalogue + package contents     |
+| GET    | `/api/admin/vehicle-types`                   | **Protected**: vehicle types + pricing matrix        |
+| GET    | `/api/admin/blocked-periods`                 | **Protected**: all blocked periods                   |
+| GET    | `/api/admin/settings`                        | **Protected**: site settings (single object)         |
+| GET    | `/api/admin/gallery`                         | **Protected**: all gallery items                     |
+
+The admin read endpoints (phase 6A) are specified in **`docs/ADMIN-API.md`**: parameters, strict response contracts, pagination, errors (including 404 `RESOURCE_NOT_FOUND` and 500 `SETTINGS_NOT_CONFIGURED`) and date/time semantics. All of them use the same authorization as `/api/admin/me` below.
 
 The catalogue and health endpoints are unchanged from phase 3 and are documented in `apps/api/README.md`.
 
