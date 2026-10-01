@@ -12,7 +12,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                  |
 | Fase 5: Auth0 authentication + authorization       | **Afgerond** (zie _Phase 5_); ⚠ admin-datapagina's werken pas weer na Fase 6  |
 | Fase 6A: admin-API read-side                       | **Afgerond** (zie _Phase 6A_); frontend nog niet aangesloten                  |
-| Volgende fase                                      | **Admin API write-side and transactions** (6B)                                |
+| Fase 6B: admin-API write-side                      | **Afgerond** (zie _Phase 6B_); frontend nog niet aangesloten                  |
+| Volgende fase                                      | **Gallery storage/uploads and remaining admin data integrations** (6C)        |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)             |
 
 ## Phase 2: database layer
@@ -118,6 +119,49 @@ Specificatie: `docs/ADMIN-API.md`. Mapping per bestaande admin-query: `docs/ADMI
 - **Frontend status**: **NOT MIGRATED**. De admin-frontend gebruikt nog Supabase en werkt sinds Fase 5 zonder Supabase-sessie niet voor data; zie de waarschuwing bij Phase 5.
 
 **Next phase: "Admin API write-side and transactions"**
+
+## Phase 6B — Admin API write-side
+
+**Status: COMPLETE**
+
+Specificatie: `docs/ADMIN-API.md` (sectie _Writes_). Mapping en atomiciteitsmatrix: `docs/ADMIN-WRITE-MIGRATION-MAP.md`.
+
+- **Endpoints** (allemaal Auth0 `admin:access`):
+  - **Boekingen**: `POST /api/admin/bookings`, `PATCH`/`DELETE /api/admin/bookings/:id`, `GET /api/admin/availability` (met `exclude_booking_id`).
+  - **Diensten**: `POST /api/admin/services`, `PATCH`/`DELETE /api/admin/services/:id`, `PUT /api/admin/services/:id/package-content`.
+  - **Voertuigtypes**: `POST /api/admin/vehicle-types`, `PATCH`/`DELETE /api/admin/vehicle-types/:id`, `PUT /api/admin/vehicle-types/:id/pricing`.
+  - **Blokkades**: `POST /api/admin/blocked-periods`, `DELETE /api/admin/blocked-periods/:id`.
+  - **Instellingen**: `PATCH /api/admin/settings`.
+  - **Galerij**: `POST /api/admin/gallery`, `PATCH`/`DELETE /api/admin/gallery/:id`.
+- **Pricing**:
+  - Admin-boekingen gebruiken **dezelfde engine** als `POST /api/bookings` (`planNewBooking`, `validateSchedule`, `insertBooking` in `booking.service.ts`).
+  - De client stuurt nooit prijs, duur, locatievergoeding, token of tijdstempels; doet hij dat toch, dan volgt een 400.
+  - Bij het verplaatsen blijven prijs en duur behouden. Bij een andere dienstkeuze wordt opnieuw geprijsd en worden de snapshots vervangen.
+- **`exclude_booking_id`**: elke overlapcontrole bij een update sluit de boeking zelf uit. De exclusion constraint blijft de laatste beveiliging.
+- **Transacties** (elk één `db.transaction`):
+  - boeking aanmaken en bijwerken (met `FOR UPDATE`);
+  - dienst aanmaken met prijsrijen;
+  - pakketinhoud;
+  - voertuigtype aanmaken met prijsrijen;
+  - prijsmatrix (all-or-nothing);
+  - settings (met een lock).
+- **FK-semantiek**:
+  - Een voertuigtype dat nog in boekingen gebruikt wordt, kan niet verwijderd worden: 409 `RESOURCE_IN_USE` (SQLSTATE 23001/23503).
+  - Bij het verwijderen van een dienst blijven de boekingssnapshots bestaan (SET NULL).
+  - Een dubbele slug geeft 409 `RESOURCE_CONFLICT`.
+- **Bewuste wijzigingen tegenover de oude UI** (zie de map):
+  - Er kan geen vrije prijs, duur of `service_title` meer ingegeven worden.
+  - `customer_email` is verplicht. De oude placeholder `geen@autowascenter.be` wordt niet nagebootst; dat is een **DECIDE** voor de frontendmigratie.
+  - Er is geen PATCH voor blokkades, omdat de UI die niet heeft.
+  - Bij de galerij wordt alleen metadata verwijderd; het bestand zelf volgt in Fase 6C.
+- **Tests**: `apps/api` heeft nu 187 tests, allemaal geslaagd. Het verloop: Fase 5 → 124, Fase 6A → 143, Fase 6B → +44, waarvan:
+  - 17 booking-writes: aanmaken, verplaatsen met en zonder botsing, eigen slot, datum en tijd, verleden, buiten het grid, dienstwijziging, statusovergangen inclusief annuleren en heractiveren, notities, verwijderen, admin-availability en integriteit;
+  - 20 catalogus- en content-writes, inclusief de auth-matrix voor alle 18 write-endpoints;
+  - **7 rollbacktests** met geforceerde fouten halverwege de transactie: dienst met prijsrijen, voertuigtype met prijsrijen, pakketinhoud, boeking met regels (admin en publiek), dienstwijziging van een boeking, prijsmatrix met A en B geldig en C fout, en integriteit.
+- **Frontend status**: **NOT MIGRATED**. De admin-UI gebruikt nog Supabase.
+- **Storage**: **NOT MIGRATED**, gepland voor Fase 6C.
+
+**Next phase: "Gallery storage/uploads and remaining admin data integrations"**
 
 ## Current architecture
 

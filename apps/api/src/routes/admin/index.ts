@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { authenticate, requirePermission } from "../../auth/plugin.ts";
 import { ADMIN_ACCESS } from "../../auth/principal.ts";
+import { adminBookingWriteRoutes } from "./bookings-write.ts";
+import { adminCatalogWriteRoutes } from "./catalog-write.ts";
+import { adminContentWriteRoutes } from "./content-write.ts";
 import { adminReadRoutes } from "./read.ts";
 
 /**
@@ -20,4 +23,7 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   await app.register(adminReadRoutes);
+  await app.register(adminBookingWriteRoutes);
+  await app.register(adminCatalogWriteRoutes);
+  await app.register(adminContentWriteRoutes);
 }

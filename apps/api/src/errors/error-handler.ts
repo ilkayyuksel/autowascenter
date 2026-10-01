@@ -29,6 +29,28 @@ export function isDatabaseUnavailable(error: unknown): boolean {
   return false;
 }
 
+/** SQLSTATE of a PostgreSQL error, also when wrapped (e.g. by a Drizzle query error). */
+export function pgErrorCode(error: unknown): string | undefined {
+  for (let e = error, depth = 0; e && depth < 5; e = (e as { cause?: unknown }).cause, depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return code;
+  }
+  return undefined;
+}
+
+/**
+ * Safety net for integrity violations that services did not translate themselves. The
+ * database constraints are the last line of defence; the client only gets a generic code.
+ */
+const CONSTRAINT_ERRORS: Record<string, [number, string, string]> = {
+  "23P01": [409, "BOOKING_SLOT_UNAVAILABLE", "The chosen time slot is no longer available."],
+  "23505": [409, "RESOURCE_CONFLICT", "The change conflicts with existing data."],
+  "23503": [409, "RESOURCE_CONFLICT", "The change conflicts with related data."],
+  "23001": [409, "RESOURCE_IN_USE", "The resource is still in use."],
+  "23514": [400, "VALIDATION_ERROR", "Invalid request: a value is not allowed."],
+  "23502": [400, "VALIDATION_ERROR", "Invalid request: a required value is missing."],
+};
+
 /**
  * Central error handling: every error response has the shape `{ error: { code, message } }`.
  * Unexpected errors are logged with full detail server-side; the client only gets a generic
@@ -57,6 +79,13 @@ export function registerErrorHandling(app: FastifyInstance) {
     const statusCode = (error as FastifyError).statusCode;
     if (statusCode && statusCode >= 400 && statusCode < 500) {
       return reply.code(statusCode).send(errorBody("BAD_REQUEST", error.message));
+    }
+
+    const constraint = CONSTRAINT_ERRORS[pgErrorCode(error) ?? ""];
+    if (constraint) {
+      const [status, code, message] = constraint;
+      request.log.warn({ err: error }, "database constraint violation");
+      return reply.code(status).send(errorBody(code, message));
     }
 
     if (isDatabaseUnavailable(error)) {

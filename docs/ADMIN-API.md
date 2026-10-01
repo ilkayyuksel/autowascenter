@@ -1,9 +1,9 @@
 # Admin API
 
-Read-side of the admin API (phase 6A), served from the self-hosted PostgreSQL.
+Admin API on the self-hosted PostgreSQL: the read side (phase 6A) and the write side (phase 6B, see [Writes](#writes)).
 
-- There are **no write endpoints** yet (phase 6B).
 - The admin frontend is **not connected** yet and still uses Supabase.
+- File uploads and storage come in phase 6C.
 - Mapping to the current frontend queries: `docs/ADMIN-MIGRATION-MAP.md`. Contracts (strict Zod): `apps/api/src/contracts/admin.ts`.
 
 ## Authentication
@@ -194,18 +194,118 @@ Ordered by `sort_order`. Uploads and storage are outside this phase.
 
 The shape is always `{ "error": { "code", "message" } }`. There is never SQL, a stack trace or token details.
 
-| Status | Code                         | When                                                          |
-| ------ | ---------------------------- | ------------------------------------------------------------- |
-| 400    | `VALIDATION_ERROR`           | Malformed or unknown parameters, bad UUID, invalid date range |
-| 401    | `AUTHENTICATION_REQUIRED`    | No `Authorization` header                                     |
-| 401    | `AUTHENTICATION_INVALID`     | Token invalid, expired, wrong issuer, audience or signature   |
-| 403    | `AUTHORIZATION_REQUIRED`     | Token without `admin:access`                                  |
-| 404    | `RESOURCE_NOT_FOUND`         | Unknown booking id                                            |
-| 404    | `NOT_FOUND`                  | Unknown route                                                 |
-| 500    | `SETTINGS_NOT_CONFIGURED`    | No `site_settings` row                                        |
-| 500    | `INTERNAL_ERROR`             | Unexpected error (details only in the server log)             |
-| 503    | `DATABASE_UNAVAILABLE`       | Database unreachable                                          |
-| 503    | `AUTHENTICATION_UNAVAILABLE` | Auth0 keys unreachable or Auth0 not configured                |
+| Status | Code                            | When                                                                                      |
+| ------ | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| 400    | `VALIDATION_ERROR`              | Malformed or unknown parameters or body fields, bad UUID, invalid range or business value |
+| 401    | `AUTHENTICATION_REQUIRED`       | No `Authorization` header                                                                 |
+| 401    | `AUTHENTICATION_INVALID`        | Token invalid, expired, wrong issuer, audience or signature                               |
+| 403    | `AUTHORIZATION_REQUIRED`        | Token without `admin:access`                                                              |
+| 404    | `RESOURCE_NOT_FOUND`            | Unknown booking, service, vehicle type, blocked period or gallery item                    |
+| 404    | `VEHICLE_TYPE_NOT_FOUND`        | Booking writes: unknown or inactive vehicle type                                          |
+| 404    | `SERVICE_NOT_FOUND`             | Booking writes: a service is not bookable for the vehicle type                            |
+| 404    | `NOT_FOUND`                     | Unknown route                                                                             |
+| 409    | `BOOKING_SLOT_UNAVAILABLE`      | Overlap with another booking or a blocked period (exclusion constraint included)          |
+| 409    | `RESOURCE_CONFLICT`             | Unique value already taken (vehicle type slug)                                            |
+| 409    | `RESOURCE_IN_USE`               | Vehicle type still referenced by bookings (`ON DELETE RESTRICT`)                          |
+| 422    | `BOOKING_OUTSIDE_OPENING_HOURS` | Start before opening, work not fitting the window, or off the slot grid                   |
+| 422    | `BOOKING_IN_PAST`               | New date/time before "now" (Europe/Brussels)                                              |
+| 500    | `SETTINGS_NOT_CONFIGURED`       | No `site_settings` row                                                                    |
+| 500    | `INTERNAL_ERROR`                | Unexpected error, including a failed transaction (details only in the server log)         |
+| 503    | `DATABASE_UNAVAILABLE`          | Database unreachable                                                                      |
+| 503    | `AUTHENTICATION_UNAVAILABLE`    | Auth0 keys unreachable or Auth0 not configured                                            |
+
+Constraint violations that a service did not translate itself are mapped centrally, with a generic message and no SQL:
+
+- `23P01` → 409 `BOOKING_SLOT_UNAVAILABLE`
+- `23505` and `23503` → 409 `RESOURCE_CONFLICT`
+- `23001` → 409 `RESOURCE_IN_USE`
+- `23514` and `23502` → 400 `VALIDATION_ERROR`
+
+## Writes
+
+All writes (phase 6B) share these rules:
+
+- **Authorization**: the same parent-plugin hooks, Auth0 `admin:access`.
+- **Validation**: a **strict** Zod body or query; unknown fields → 400.
+- **Queries**: parameterized Drizzle only.
+- **Responses**:
+  - create: **201** `{ data }`, in the same resource shape as the read endpoints;
+  - update: **200** `{ data }`;
+  - delete: **204** with no body.
+- **Transactions**: every multi-table mutation is **one transaction** (`db.transaction(...)`, visible in the service function). Any error rolls everything back. See the atomicity matrix in `docs/ADMIN-WRITE-MIGRATION-MAP.md`.
+- **Never trusted from the client**: price, total, duration, location fee, cancel token, `start_at`/`end_at`. Booking amounts come from the **same pricing engine** as `POST /api/bookings`.
+
+### Bookings
+
+| METHOD / PATH                                                                         | BODY / PARAMS                                                                                                                                                                                                                                                       | RESPONSE                                                                      | ERRORS             | TABLES                                         | TRANSACTION                   |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------ | ---------------------------------------------- | ----------------------------- |
+| `POST /api/admin/bookings`                                                            | `vehicle_type_id`, `service_ids` (1–50, unique), `preferred_date`, `preferred_time` (`HH:mm`), `customer_name`, `customer_email`, `customer_phone`, optional `vehicle_brand`, `vehicle_model`, `notes`, and `status` (`nieuw`, `bevestigd` (default) or `voltooid`) | 201 `{ data: AdminBookingDetail & { pricing } }`                              | 400, 404, 409, 422 | `bookings`, `booking_services`                 | Yes                           |
+| `PATCH /api/admin/bookings/:id`                                                       | At least one of `preferred_date`, `preferred_time`, `status` (all 4), `notes`, `vehicle_type_id`, `service_ids`                                                                                                                                                     | 200 `{ data: AdminBookingDetail & { pricing } }`                              | 400, 404, 409, 422 | `bookings`, `booking_services`                 | Yes (row locked `FOR UPDATE`) |
+| `DELETE /api/admin/bookings/:id`                                                      | —                                                                                                                                                                                                                                                                   | 204                                                                           | 400, 404           | `bookings` (+ CASCADE lines)                   | One statement                 |
+| `GET /api/admin/availability?date=&exclude_booking_id=&vehicle_type_id=&service_ids=` | `date` plus either `vehicle_type_id` + `service_ids`, or `exclude_booking_id` (then that booking's duration is used)                                                                                                                                                | 200 `{ data: { date, total_duration_minutes, exclude_booking_id, slots[] } }` | 400, 404           | `bookings`, `blocked_periods`, `site_settings` | — (read)                      |
+
+**Booking create** follows the same steps as the public flow: resolve and price the services for the vehicle type, then check opening hours, slot grid, "not in the past", blocked periods and overlap, then insert the booking and its `booking_services` snapshots. Differences from the public flow:
+
+- The admin chooses the status.
+- An extra on its own is allowed, because the agenda dialog lists all kinds.
+- There are no on-location fields; the location fee stays 0.
+
+**Booking update**:
+
+- **`service_ids` / `vehicle_type_id`**: re-priced and re-timed from the database. `booking_services` is replaced, and `total_price`, `total_duration_minutes`, `service_id` and `service_title` (legacy) are recomputed.
+- **Date and time only**: the stored price and duration are **kept**, so a move does not re-price the booking. The new slot is checked for opening hours, grid, past and overlap.
+- **Duration and `service_title`** can no longer be set freely (**CHANGED** versus the old UI).
+- **`exclude_booking_id`**: every overlap check during an update **excludes the booking itself**, so moving 10:00–12:00 to 11:00–13:00 works, while all other bookings and blocked periods still count. The PostgreSQL exclusion constraint stays the final guard. A client with a stale availability result can never force an occupied slot.
+- **Status**:
+  - all four values are allowed, as in the UI;
+  - `→ geannuleerd` sets `cancelled_at` (frees the slot);
+  - leaving `geannuleerd` clears it and **re-checks overlap** (409 if the slot was taken meanwhile).
+
+### Services and package contents
+
+| METHOD / PATH                                 | BODY                                                                                                                                                                   | RESPONSE                     | ERRORS   | TABLES                              | TRANSACTION   |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------- | ----------------------------------- | ------------- |
+| `POST /api/admin/services`                    | `kind` (required); optional `title`, `description`, `icon`, `category`, `badge`, `image_url`, `bookable`, `active`, `sort_order`, `price`, `duration_minutes` (legacy) | 201 `{ data: AdminService }` | 400      | `services`, `vehicle_type_services` | Yes           |
+| `PATCH /api/admin/services/:id`               | At least one of the fields above                                                                                                                                       | 200 `{ data: AdminService }` | 400, 404 | `services`                          | One statement |
+| `PUT /api/admin/services/:id/package-content` | `{ service_ids: uuid[] }` (0–100, unique): the **complete** contents                                                                                                   | 200 `{ data: AdminService }` | 400, 404 | `package_services`                  | Yes           |
+| `DELETE /api/admin/services/:id`              | —                                                                                                                                                                      | 204                          | 400, 404 | `services` (+ FK actions)           | One statement |
+
+- **Create defaults** (from `diensten.tsx`):
+  - title `Nieuw pakket`, `Nieuwe dienst` or `Nieuwe extra dienst`;
+  - icon `sparkles`, `sort_order` = number of services;
+  - plus a pricing row (price **0**, duration **60**, available) for **every** vehicle type.
+- **Package contents**: the target must be `kind = 'pakket'`. The ids must exist, must not include the package itself, and must not be packages; otherwise 400 and nothing changes. The old rows are deleted and the new ones inserted in one transaction.
+- **Delete**: pricing rows and package rows cascade. `booking_services.service_id` and `bookings.service_id` become NULL, so booking snapshots are kept.
+
+### Vehicle types and pricing matrix
+
+| METHOD / PATH                              | BODY                                                                                                                      | RESPONSE                         | ERRORS                              | TABLES                                   | TRANSACTION   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------- | ---------------------------------------- | ------------- |
+| `POST /api/admin/vehicle-types`            | Optional `slug` (`a-z0-9-`), `title`, `description`, `image_url`, `active`, `sort_order`                                  | 201 `{ data: AdminVehicleType }` | 400, 409                            | `vehicle_types`, `vehicle_type_services` | Yes           |
+| `PATCH /api/admin/vehicle-types/:id`       | At least one of the fields above                                                                                          | 200 `{ data: AdminVehicleType }` | 400, 404, 409                       | `vehicle_types`                          | One statement |
+| `DELETE /api/admin/vehicle-types/:id`      | —                                                                                                                         | 204                              | 400, 404, **409 `RESOURCE_IN_USE`** | `vehicle_types` (+ CASCADE rows)         | One statement |
+| `PUT /api/admin/vehicle-types/:id/pricing` | `{ rows: [{ service_id, available, price (≥ 0, 2 decimals), duration_minutes (1–10080) }] }` (1–500, unique `service_id`) | 200 `{ data: AdminVehicleType }` | 400, 404                            | `vehicle_type_services`                  | **Yes**       |
+
+- **Create defaults** (from `voertuigen.tsx`):
+  - slug `nieuw-<timestamp>`, title `Nieuw voertuigtype`, `sort_order` = number of types × 10;
+  - plus a row (price **30**, duration **60**, available) for every **active, bookable** service.
+- A duplicate slug → 409 `RESOURCE_CONFLICT`.
+- **Pricing matrix**: every row is upserted per (vehicle type, service) inside one transaction, with the vehicle type locked. Any invalid or failing row → **no** row is saved. Rows not in the request are left unchanged. Inactive or non-bookable services are allowed, because the UI also saves those hidden rows.
+
+### Blocked periods, settings, gallery
+
+| METHOD / PATH                           | BODY                                                                                                                                                                   | RESPONSE                           | ERRORS   | TABLES            | TRANSACTION             |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------- | ----------------- | ----------------------- |
+| `POST /api/admin/blocked-periods`       | `start_date`, `end_date` (`start ≤ end`), optional `start_time`, `end_time` (`HH:mm`, `start < end` when both are set), `reason`                                       | 201 `{ data: AdminBlockedPeriod }` | 400      | `blocked_periods` | One statement           |
+| `DELETE /api/admin/blocked-periods/:id` | —                                                                                                                                                                      | 204                                | 400, 404 | `blocked_periods` | One statement           |
+| `PATCH /api/admin/settings`             | At least one of `km_fee`, `free_km`, `base_address`, `base_city`, `opening_hour`, `closing_hour`, `slot_interval_minutes` (1–1440), `notification_email` (`""` → null) | 200 `{ data: settings }`           | 400, 500 | `site_settings`   | Yes (row lock + update) |
+| `POST /api/admin/gallery`               | `image_url` (absolute path or http(s) URL), optional `title`, `description`, `sort_order` (default: number of items)                                                   | 201 `{ data: AdminGalleryItem }`   | 400      | `gallery_items`   | One statement           |
+| `PATCH /api/admin/gallery/:id`          | At least one of `title`, `description`, `sort_order` (the fields the UI edits)                                                                                         | 200 `{ data: AdminGalleryItem }`   | 400, 404 | `gallery_items`   | One statement           |
+| `DELETE /api/admin/gallery/:id`         | —                                                                                                                                                                      | 204                                | 400, 404 | `gallery_items`   | One statement           |
+
+- **Blocked periods**: there is no PATCH, because the current UI cannot edit them.
+- **Settings**: the merged result must keep `opening_hour < closing_hour`. The single row is updated in place.
+- **Gallery**: metadata only. **No upload, and no deletion of stored files** (phase 6C).
 
 ## Date/time semantics
 

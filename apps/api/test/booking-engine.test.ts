@@ -10,6 +10,7 @@ import { getAvailability } from "../src/services/availability.service.ts";
 import {
   createBooking,
   insertBooking,
+  type BookingDetails,
   type BookingDraft,
 } from "../src/services/booking.service.ts";
 import { calculatePricing, resolveSelection } from "../src/services/pricing.service.ts";
@@ -63,6 +64,25 @@ function request(overrides: Partial<Record<string, unknown>> = {}): ParsedBookin
     vehicle_model: "3-Reeks",
     ...overrides,
   });
+}
+
+/** Booking details for a direct insertBooking() call (bypassing the schedule pre-check). */
+function detailsFor(req: ParsedBookingRequest): BookingDetails {
+  return {
+    vehicleTypeId: req.vehicle_type_id,
+    customerName: req.customer_name,
+    customerEmail: req.customer_email,
+    customerPhone: req.customer_phone,
+    companyName: null,
+    vatNumber: null,
+    notes: null,
+    vehicleBrand: req.vehicle_brand,
+    vehicleModel: req.vehicle_model,
+    preferredDate: req.preferred_date,
+    preferredTime: req.preferred_time,
+    status: "nieuw",
+    location: { onLocation: false, locationInSintNiklaas: null, locationAddress: null },
+  };
 }
 
 const count = async (table: typeof schema.bookings | typeof schema.bookingServices) =>
@@ -428,12 +448,11 @@ describe("transaction and concurrency", () => {
     const req = request();
     const sel = await resolveSelection(db, req.vehicle_type_id, req.service_ids);
     const draft: BookingDraft = {
-      request: req,
+      details: detailsFor(req),
       lines: sel.lines,
       totalDurationMinutes: sel.totalDurationMinutes,
       pricing: calculatePricing(sel.lines, 0),
       job: planJob(DAY, 600, 60, toScheduleSettings("10:00", "18:00", 30))!,
-      location: { onLocation: false, locationInSintNiklaas: null, locationAddress: null },
     };
     await rejectsWith(
       db.transaction((tx) => insertBooking(tx as unknown as Database, draft)),
@@ -447,13 +466,12 @@ describe("transaction and concurrency", () => {
     const req = request();
     const sel = await resolveSelection(db, req.vehicle_type_id, req.service_ids);
     const broken: BookingDraft = {
-      request: req,
+      details: detailsFor(req),
       // Unknown service id → booking_services FK violation after the booking row was inserted.
       lines: [{ ...sel.lines[0]!, serviceId: "00000000-0000-4000-8000-000000000000" }],
       totalDurationMinutes: sel.totalDurationMinutes,
       pricing: calculatePricing(sel.lines, 0),
       job: planJob(DAY, 600, 60, toScheduleSettings("10:00", "18:00", 30))!,
-      location: { onLocation: false, locationInSintNiklaas: null, locationAddress: null },
     };
     await assert.rejects(db.transaction((tx) => insertBooking(tx as unknown as Database, broken)));
     assert.equal(await count(schema.bookings), 0);

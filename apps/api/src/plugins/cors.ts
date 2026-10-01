@@ -11,7 +11,8 @@ import type { FastifyInstance } from "fastify";
 export async function registerCors(app: FastifyInstance, origins: string[]) {
   await app.register(cors, {
     origin: origins.includes("*") ? true : origins,
-    methods: ["GET", "HEAD", "POST", "OPTIONS"],
+    // PATCH/PUT/DELETE are only used by /api/admin/* (Auth0 admin:access required).
+    methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     exposedHeaders: ["WWW-Authenticate"],
   });

@@ -22,8 +22,16 @@ import type {
 import { AppError } from "../../errors/app-error.ts";
 import { hhmm, hhmmOrNull, iso, money, moneyOrNull } from "./mappers.ts";
 
-/** All services (dienst/pakket/extra), by sort_order; packages carry their contents. */
-export async function listAdminServices(db: Database): Promise<AdminService[]> {
+const notFound = (what: string) => new AppError(404, "RESOURCE_NOT_FOUND", `${what} not found.`);
+
+/**
+ * All services (dienst/pakket/extra), by sort_order; packages carry their contents.
+ * `id` narrows the query to one service (used to return a resource after a write).
+ */
+export async function listAdminServices(
+  db: Database,
+  { id }: { id?: string } = {},
+): Promise<AdminService[]> {
   const [rows, contents] = await Promise.all([
     db
       .select({
@@ -44,10 +52,12 @@ export async function listAdminServices(db: Database): Promise<AdminService[]> {
         updatedAt: services.updatedAt,
       })
       .from(services)
+      .where(id ? eq(services.id, id) : undefined)
       .orderBy(asc(services.sortOrder), asc(services.id)),
     db
       .select({ packageId: packageServices.packageId, serviceId: packageServices.serviceId })
       .from(packageServices)
+      .where(id ? eq(packageServices.packageId, id) : undefined)
       .orderBy(asc(packageServices.packageId), asc(packageServices.serviceId)),
   ]);
 
@@ -76,8 +86,14 @@ export async function listAdminServices(db: Database): Promise<AdminService[]> {
   }));
 }
 
-/** All vehicle types with their full pricing matrix (vehicle_type_services + service info). */
-export async function listAdminVehicleTypes(db: Database): Promise<AdminVehicleType[]> {
+/**
+ * All vehicle types with their full pricing matrix (vehicle_type_services + service info).
+ * `id` narrows the query to one vehicle type.
+ */
+export async function listAdminVehicleTypes(
+  db: Database,
+  { id }: { id?: string } = {},
+): Promise<AdminVehicleType[]> {
   const [types, matrix] = await Promise.all([
     db
       .select({
@@ -93,6 +109,7 @@ export async function listAdminVehicleTypes(db: Database): Promise<AdminVehicleT
         updatedAt: vehicleTypes.updatedAt,
       })
       .from(vehicleTypes)
+      .where(id ? eq(vehicleTypes.id, id) : undefined)
       .orderBy(asc(vehicleTypes.sortOrder), asc(vehicleTypes.id)),
     db
       .select({
@@ -109,6 +126,7 @@ export async function listAdminVehicleTypes(db: Database): Promise<AdminVehicleT
       })
       .from(vehicleTypeServices)
       .innerJoin(services, eq(services.id, vehicleTypeServices.serviceId))
+      .where(id ? eq(vehicleTypeServices.vehicleTypeId, id) : undefined)
       .orderBy(asc(services.title), asc(vehicleTypeServices.id)),
   ]);
 
@@ -144,7 +162,28 @@ export async function listAdminVehicleTypes(db: Database): Promise<AdminVehicleT
   }));
 }
 
-export async function listAdminGallery(db: Database): Promise<AdminGalleryItem[]> {
+export async function getAdminService(db: Database, id: string): Promise<AdminService> {
+  const [service] = await listAdminServices(db, { id });
+  if (!service) throw notFound("Service");
+  return service;
+}
+
+export async function getAdminVehicleType(db: Database, id: string): Promise<AdminVehicleType> {
+  const [vehicleType] = await listAdminVehicleTypes(db, { id });
+  if (!vehicleType) throw notFound("Vehicle type");
+  return vehicleType;
+}
+
+export async function getAdminGalleryItem(db: Database, id: string): Promise<AdminGalleryItem> {
+  const [item] = await listAdminGallery(db, { id });
+  if (!item) throw notFound("Gallery item");
+  return item;
+}
+
+export async function listAdminGallery(
+  db: Database,
+  { id }: { id?: string } = {},
+): Promise<AdminGalleryItem[]> {
   const rows = await db
     .select({
       id: galleryItems.id,
@@ -158,6 +197,7 @@ export async function listAdminGallery(db: Database): Promise<AdminGalleryItem[]
       updatedAt: galleryItems.updatedAt,
     })
     .from(galleryItems)
+    .where(id ? eq(galleryItems.id, id) : undefined)
     .orderBy(asc(galleryItems.sortOrder), asc(galleryItems.id));
   return rows.map((g) => ({
     id: g.id,
@@ -200,6 +240,12 @@ function toAdminBlocked(b: BlockedRow): AdminBlockedPeriod {
     created_at: iso(b.createdAt),
     updated_at: iso(b.updatedAt),
   };
+}
+
+export async function getAdminBlockedPeriod(db: Database, id: string): Promise<AdminBlockedPeriod> {
+  const [row] = await selectBlocked(db).where(eq(blockedPeriods.id, id)).limit(1);
+  if (!row) throw notFound("Blocked period");
+  return toAdminBlocked(row);
 }
 
 /** All blocked periods, latest start first (admin/blokkades.tsx order). */

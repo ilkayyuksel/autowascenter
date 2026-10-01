@@ -44,7 +44,30 @@ HTTP API of the self-hosted backend (`apps/api`).
 | GET    | `/api/admin/settings`                        | **Protected**: site settings (single object)         |
 | GET    | `/api/admin/gallery`                         | **Protected**: all gallery items                     |
 
-The admin read endpoints (phase 6A) are specified in **`docs/ADMIN-API.md`**: parameters, strict response contracts, pagination, errors (including 404 `RESOURCE_NOT_FOUND` and 500 `SETTINGS_NOT_CONFIGURED`) and date/time semantics. All of them use the same authorization as `/api/admin/me` below.
+**Admin writes (phase 6B)**, all **protected** (`admin:access`):
+
+| Method | Path                                      | Purpose                                                        |
+| ------ | ----------------------------------------- | -------------------------------------------------------------- |
+| POST   | `/api/admin/bookings`                     | Create a booking (same pricing engine as `POST /api/bookings`) |
+| PATCH  | `/api/admin/bookings/:id`                 | Move, re-service, change status or notes                       |
+| DELETE | `/api/admin/bookings/:id`                 | Delete a booking                                               |
+| GET    | `/api/admin/availability`                 | Free slots, optionally excluding the booking being moved       |
+| POST   | `/api/admin/services`                     | Create a service + pricing rows                                |
+| PATCH  | `/api/admin/services/:id`                 | Update a service                                               |
+| PUT    | `/api/admin/services/:id/package-content` | Replace a package's contents                                   |
+| DELETE | `/api/admin/services/:id`                 | Delete a service                                               |
+| POST   | `/api/admin/vehicle-types`                | Create a vehicle type + pricing rows                           |
+| PATCH  | `/api/admin/vehicle-types/:id`            | Update a vehicle type                                          |
+| DELETE | `/api/admin/vehicle-types/:id`            | Delete (409 when bookings use it)                              |
+| PUT    | `/api/admin/vehicle-types/:id/pricing`    | Save the pricing matrix atomically                             |
+| POST   | `/api/admin/blocked-periods`              | Create a blocked period                                        |
+| DELETE | `/api/admin/blocked-periods/:id`          | Delete a blocked period                                        |
+| PATCH  | `/api/admin/settings`                     | Update the site settings                                       |
+| POST   | `/api/admin/gallery`                      | Create gallery item metadata (no upload)                       |
+| PATCH  | `/api/admin/gallery/:id`                  | Update gallery item metadata                                   |
+| DELETE | `/api/admin/gallery/:id`                  | Delete gallery item metadata                                   |
+
+The admin endpoints are specified in **`docs/ADMIN-API.md`**: parameters and bodies, strict contracts, pagination, transactions, errors (including 404 `RESOURCE_NOT_FOUND`, 409 `RESOURCE_CONFLICT`/`RESOURCE_IN_USE` and 500 `SETTINGS_NOT_CONFIGURED`) and date/time semantics. The write mapping is in `docs/ADMIN-WRITE-MIGRATION-MAP.md`. All admin endpoints use the same authorization as `/api/admin/me` below. CORS additionally allows `PATCH`, `PUT` and `DELETE` (admin only).
 
 The catalogue and health endpoints are unchanged from phase 3 and are documented in `apps/api/README.md`.
 

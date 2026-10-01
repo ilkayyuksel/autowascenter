@@ -8,7 +8,7 @@ const isoDateTime = z.iso.datetime({ offset: true });
 const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** Days since epoch of an existing calendar date `YYYY-MM-DD`, or null (e.g. 2026-02-30). */
-function dayNumber(value: string): number | null {
+export function dayNumber(value: string): number | null {
   const [y, m, d] = value.split("-").map(Number) as [number, number, number];
   const ms = Date.UTC(y, m - 1, d);
   const dt = new Date(ms);
@@ -16,7 +16,7 @@ function dayNumber(value: string): number | null {
     ? ms / 86_400_000
     : null;
 }
-const calendarDate = localDate.refine((v) => dayNumber(v) !== null, "invalid calendar date");
+export const calendarDate = localDate.refine((v) => dayNumber(v) !== null, "invalid calendar date");
 const localTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const money = z.number();
 const bookingStatus = z.enum(["nieuw", "bevestigd", "voltooid", "geannuleerd"]);

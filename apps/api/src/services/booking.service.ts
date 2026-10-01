@@ -1,8 +1,14 @@
-// Public booking creation: one transaction, server-computed prices/durations/timestamps,
-// database exclusion constraint as the final guard against double booking.
+// Booking engine shared by the public booking API and the admin booking API:
+// server-computed prices/durations/timestamps, one transaction per mutation, and the database
+// exclusion constraint as the final guard against double booking.
 // Lifecycle and rules: docs/BOOKING-BUSINESS-LOGIC.md §8–§9.
 
-import type { BookingCreatedResponse, ParsedBookingRequest } from "@autowascenter/shared";
+import type {
+  BookingCreatedResponse,
+  BookingStatus,
+  ParsedBookingRequest,
+} from "@autowascenter/shared";
+import { eq } from "drizzle-orm";
 import type { Database } from "../db/index.ts";
 import { bookings, bookingServices } from "../db/schema/index.ts";
 import { AppError } from "../errors/app-error.ts";
@@ -23,12 +29,15 @@ import {
   type PricedLine,
   type PricingCents,
 } from "./pricing.service.ts";
-import { candidateStarts, planJob, type PlannedJob } from "./schedule.ts";
+import { candidateStarts, planJob, type PlannedJob, type ScheduleSettings } from "./schedule.ts";
 
 const EXCLUSION_VIOLATION = "23P01";
 
 export const slotUnavailable = () =>
   new AppError(409, "BOOKING_SLOT_UNAVAILABLE", "The chosen time slot is no longer available.");
+
+const outsideOpeningHours = (message: string) =>
+  new AppError(422, "BOOKING_OUTSIDE_OPENING_HOURS", message);
 
 /** True when the error (or a wrapped cause) is the bookings overlap exclusion violation. */
 export function isOverlapViolation(error: unknown): boolean {
@@ -38,13 +47,95 @@ export function isOverlapViolation(error: unknown): boolean {
   return false;
 }
 
-/** Everything needed to insert a booking; all values are server-computed except customer data. */
-export interface BookingDraft {
-  request: ParsedBookingRequest;
-  lines: PricedLine[];
-  totalDurationMinutes: number;
-  pricing: PricingCents;
-  job: PlannedJob;
+/** Runs a write and turns an exclusion-constraint violation into 409 (never a DB error). */
+export async function guardOverlap<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    if (isOverlapViolation(error)) throw slotUnavailable();
+    throw error;
+  }
+}
+
+/** A start fits the opening window (slots.ts rule: start ≥ open, start + min(dur, day) ≤ close). */
+function fitsOpeningHours(startMinutes: number, durationMinutes: number, s: ScheduleSettings) {
+  const dayLength = s.closeMinutes - s.openMinutes;
+  return (
+    dayLength > 0 &&
+    startMinutes >= s.openMinutes &&
+    startMinutes + Math.min(durationMinutes, dayLength) <= s.closeMinutes
+  );
+}
+
+export interface ScheduleCheck {
+  /** Require a start on the slot grid (new bookings and moves). */
+  enforceGrid: boolean;
+  /** Reject starts before "now" in Europe/Brussels (new bookings and moves). */
+  enforceFuture: boolean;
+  /** Check bookings + blocked periods (skipped when the booking is/stays cancelled). */
+  checkOccupancy: boolean;
+  /** The booking being edited never blocks itself. */
+  excludeBookingId?: string;
+}
+
+/**
+ * Validates a start against opening hours, slot grid, "now", blocked periods and other
+ * bookings, and computes the absolute [start_at, end_at). Must run inside the transaction
+ * that writes the booking.
+ */
+export async function validateSchedule(
+  tx: Database,
+  slot: { date: string; time: string; durationMinutes: number },
+  now: Date,
+  check: ScheduleCheck,
+): Promise<PlannedJob> {
+  const settings = await loadScheduleSettings(tx);
+  const startMinutes = timeToMinutes(slot.time);
+
+  if (check.enforceGrid) {
+    if (!candidateStarts(slot.durationMinutes, settings).includes(startMinutes)) {
+      throw outsideOpeningHours(
+        "The chosen time is not an available start time within opening hours.",
+      );
+    }
+  } else if (!fitsOpeningHours(startMinutes, slot.durationMinutes, settings)) {
+    throw outsideOpeningHours("The booking does not fit within opening hours.");
+  }
+  if (check.enforceFuture && futureStarts(slot.date, [startMinutes], now).length === 0) {
+    throw new AppError(422, "BOOKING_IN_PAST", "The chosen date and time are in the past.");
+  }
+
+  const job = planJob(slot.date, startMinutes, slot.durationMinutes, settings);
+  if (!job) throw outsideOpeningHours("The chosen time does not exist in local time.");
+
+  if (check.checkOccupancy) {
+    // Friendly pre-check; the exclusion constraint stays the final guard.
+    const occupancy = await loadOccupancy(
+      tx,
+      slot.date,
+      slot.durationMinutes,
+      settings,
+      check.excludeBookingId,
+    );
+    if (isOccupied(job, occupancy)) throw slotUnavailable();
+  }
+  return job;
+}
+
+/** Customer and booking data that is not computed by the server. */
+export interface BookingDetails {
+  vehicleTypeId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  companyName: string | null;
+  vatNumber: string | null;
+  notes: string | null;
+  vehicleBrand: string | null;
+  vehicleModel: string | null;
+  preferredDate: string;
+  preferredTime: string;
+  status: BookingStatus;
   location: {
     onLocation: boolean;
     locationInSintNiklaas: boolean | null;
@@ -52,64 +143,116 @@ export interface BookingDraft {
   };
 }
 
-const emptyToNull = (value: string | undefined) => (value ? value : null);
+/** Everything needed to insert a booking; price/duration/times are server-computed. */
+export interface BookingDraft {
+  details: BookingDetails;
+  lines: PricedLine[];
+  totalDurationMinutes: number;
+  pricing: PricingCents;
+  job: PlannedJob;
+}
+
+const centsToNumeric = (cents: number) => (cents / 100).toFixed(2);
+
+/** Legacy columns, filled like routes/reservatie.tsx so the old admin UI keeps working. */
+export function legacyServiceColumns(lines: PricedLine[]) {
+  return {
+    serviceId: lines[0]?.serviceId ?? null,
+    serviceTitle: lines.map((l) => l.title).join(", "),
+  };
+}
+
+export function vehicleInfo(brand: string | null, model: string | null) {
+  return `${brand ?? ""} ${model ?? ""}`.trim() || null;
+}
+
+/** Replaces the booking_services snapshot rows of a booking (inside a transaction). */
+export async function replaceBookingLines(tx: Database, bookingId: string, lines: PricedLine[]) {
+  await tx.delete(bookingServices).where(eq(bookingServices.bookingId, bookingId));
+  await tx.insert(bookingServices).values(
+    lines.map((line) => ({
+      bookingId,
+      serviceId: line.serviceId,
+      serviceTitle: line.title,
+      price: centsToNumeric(line.priceCents),
+      durationMinutes: line.durationMinutes,
+    })),
+  );
+}
 
 /**
  * Inserts the booking and its booking_services snapshot rows. Must run inside a transaction.
- * An overlap caught by the exclusion constraint (a concurrent booking committed after our
- * check) is reported as 409 BOOKING_SLOT_UNAVAILABLE, never as a database error.
+ * cancel_token is never accepted from a client: the database default generates it.
  */
 export async function insertBooking(tx: Database, draft: BookingDraft): Promise<string> {
-  const { request: r, lines, job, pricing, location } = draft;
-  try {
+  const { details: d, lines, job, pricing } = draft;
+  return guardOverlap(async () => {
     const [row] = await tx
       .insert(bookings)
       .values({
-        customerName: r.customer_name,
-        customerEmail: r.customer_email,
-        customerPhone: r.customer_phone,
-        companyName: emptyToNull(r.company_name),
-        vatNumber: emptyToNull(r.vat_number),
-        notes: emptyToNull(r.notes),
-        vehicleTypeId: r.vehicle_type_id,
-        vehicleBrand: r.vehicle_brand,
-        vehicleModel: r.vehicle_model,
-        // Legacy columns, filled exactly like routes/reservatie.tsx so the admin UI keeps working.
-        vehicleInfo: `${r.vehicle_brand} ${r.vehicle_model}`,
-        serviceId: lines[0]?.serviceId ?? null,
-        serviceTitle: lines.map((l) => l.title).join(", "),
-        preferredDate: r.preferred_date,
-        preferredTime: r.preferred_time,
+        customerName: d.customerName,
+        customerEmail: d.customerEmail,
+        customerPhone: d.customerPhone,
+        companyName: d.companyName,
+        vatNumber: d.vatNumber,
+        notes: d.notes,
+        vehicleTypeId: d.vehicleTypeId,
+        vehicleBrand: d.vehicleBrand,
+        vehicleModel: d.vehicleModel,
+        vehicleInfo: vehicleInfo(d.vehicleBrand, d.vehicleModel),
+        ...legacyServiceColumns(lines),
+        preferredDate: d.preferredDate,
+        preferredTime: d.preferredTime,
         startAt: job.startAt,
         endAt: job.endAt,
         totalDurationMinutes: draft.totalDurationMinutes,
-        totalPrice: (pricing.totalExclVat / 100).toFixed(2),
-        locationFee: (pricing.locationFee / 100).toFixed(2),
-        onLocation: location.onLocation,
-        locationInSintNiklaas: location.locationInSintNiklaas,
-        locationAddress: location.locationAddress,
-        // Server-controlled: a public booking always starts as 'nieuw'.
-        // cancel_token is generated by the database default (gen_random_uuid()).
-        status: "nieuw",
+        totalPrice: centsToNumeric(pricing.totalExclVat),
+        locationFee: centsToNumeric(pricing.locationFee),
+        onLocation: d.location.onLocation,
+        locationInSintNiklaas: d.location.locationInSintNiklaas,
+        locationAddress: d.location.locationAddress,
+        status: d.status,
       })
       .returning({ id: bookings.id });
-
     const bookingId = row!.id;
-    await tx.insert(bookingServices).values(
-      lines.map((line) => ({
-        bookingId,
-        serviceId: line.serviceId,
-        serviceTitle: line.title,
-        price: (line.priceCents / 100).toFixed(2),
-        durationMinutes: line.durationMinutes,
-      })),
-    );
+    await replaceBookingLines(tx, bookingId, lines);
     return bookingId;
-  } catch (error) {
-    if (isOverlapViolation(error)) throw slotUnavailable();
-    throw error;
-  }
+  });
 }
+
+/**
+ * Prices a selection and validates its schedule: the common core of public and admin
+ * booking creation (same pricing engine, same duration and location-fee rules).
+ */
+export async function planNewBooking(
+  tx: Database,
+  input: {
+    vehicleTypeId: string;
+    serviceIds: string[];
+    date: string;
+    time: string;
+    location: BookingDetails["location"];
+    requireMainService: boolean;
+  },
+  now: Date,
+) {
+  const { lines, totalDurationMinutes } = await resolveSelection(
+    tx,
+    input.vehicleTypeId,
+    input.serviceIds,
+  );
+  if (input.requireMainService) assertHasMainService(lines);
+  const pricing = calculatePricing(lines, calculateLocationFeeCents(input.location));
+  const job = await validateSchedule(
+    tx,
+    { date: input.date, time: input.time, durationMinutes: totalDurationMinutes },
+    now,
+    { enforceGrid: true, enforceFuture: true, checkOccupancy: true },
+  );
+  return { lines, totalDurationMinutes, pricing, job };
+}
+
+const emptyToNull = (value: string | undefined) => (value ? value : null);
 
 /**
  * Validates, prices and stores a public booking atomically. Every step runs in one
@@ -122,15 +265,6 @@ export async function createBooking(
 ): Promise<BookingCreatedResponse["data"]> {
   const draft = await db.transaction(async (tx) => {
     const t = tx as unknown as Database;
-
-    // 1-3. Services for the vehicle type, price and duration (from the database only).
-    const { lines, totalDurationMinutes } = await resolveSelection(
-      t,
-      request.vehicle_type_id,
-      request.service_ids,
-    );
-    assertHasMainService(lines);
-
     const location = {
       onLocation: request.on_location,
       locationInSintNiklaas: request.on_location ? Boolean(request.location_in_sint_niklaas) : null,
@@ -139,49 +273,37 @@ export async function createBooking(
           ? emptyToNull(request.location_address)
           : null,
     };
-    const pricing = calculatePricing(lines, calculateLocationFeeCents(location));
-
-    // 4. Opening hours, slot grid, "not in the past", start_at/end_at.
-    const settings = await loadScheduleSettings(t);
-    const startMinutes = timeToMinutes(request.preferred_time);
-    const validStarts = candidateStarts(totalDurationMinutes, settings);
-    if (!validStarts.includes(startMinutes)) {
-      throw new AppError(
-        422,
-        "BOOKING_OUTSIDE_OPENING_HOURS",
-        "The chosen time is not an available start time within opening hours.",
-      );
-    }
-    if (futureStarts(request.preferred_date, [startMinutes], now).length === 0) {
-      throw new AppError(422, "BOOKING_IN_PAST", "The chosen date and time are in the past.");
-    }
-    const job = planJob(request.preferred_date, startMinutes, totalDurationMinutes, settings);
-    if (!job) {
-      throw new AppError(
-        422,
-        "BOOKING_OUTSIDE_OPENING_HOURS",
-        "The chosen time does not exist in local time.",
-      );
-    }
-
-    // 5. Existing bookings and blocked periods (friendly pre-check; the constraint is final).
-    const occupancy = await loadOccupancy(
+    const planned = await planNewBooking(
       t,
-      request.preferred_date,
-      totalDurationMinutes,
-      settings,
+      {
+        vehicleTypeId: request.vehicle_type_id,
+        serviceIds: request.service_ids,
+        date: request.preferred_date,
+        time: request.preferred_time,
+        location,
+        requireMainService: true,
+      },
+      now,
     );
-    if (isOccupied(job, occupancy)) throw slotUnavailable();
-
     const result: BookingDraft = {
-      request,
-      lines,
-      totalDurationMinutes,
-      pricing,
-      job,
-      location,
+      ...planned,
+      details: {
+        vehicleTypeId: request.vehicle_type_id,
+        customerName: request.customer_name,
+        customerEmail: request.customer_email,
+        customerPhone: request.customer_phone,
+        companyName: emptyToNull(request.company_name),
+        vatNumber: emptyToNull(request.vat_number),
+        notes: emptyToNull(request.notes),
+        vehicleBrand: request.vehicle_brand,
+        vehicleModel: request.vehicle_model,
+        preferredDate: request.preferred_date,
+        preferredTime: request.preferred_time,
+        // Server-controlled: a public booking always starts as 'nieuw'.
+        status: "nieuw",
+        location,
+      },
     };
-    // 6-7. Insert booking + snapshots; 8. commit when the callback returns.
     const id = await insertBooking(t, result);
     return { ...result, id };
   });

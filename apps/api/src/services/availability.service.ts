@@ -44,12 +44,16 @@ export interface Occupancy {
  * Everything that can conflict with a job starting on `date`: non-cancelled bookings whose
  * [start_at, end_at) overlaps the local days the job can span, and blocked periods on those
  * days. The booking predicate matches the partial GiST exclusion index.
+ *
+ * `excludeBookingId` leaves one booking out: the booking that is being moved or edited must
+ * never block itself (admin update). All other bookings still count.
  */
 export async function loadOccupancy(
   db: Database,
   date: string,
   durationMinutes: number,
   settings: ScheduleSettings,
+  excludeBookingId?: string,
 ): Promise<Occupancy> {
   const lastDate = addDays(date, daysSpanned(durationMinutes, settings));
   // Midnight always exists in Europe/Brussels (DST changes at 02:00/03:00).
@@ -63,6 +67,7 @@ export async function loadOccupancy(
       .where(
         and(
           ne(bookings.status, "geannuleerd"),
+          excludeBookingId ? ne(bookings.id, excludeBookingId) : undefined,
           sql`tstzrange(${bookings.startAt}, ${bookings.endAt}, '[)') && tstzrange(${from}::timestamptz, ${to}::timestamptz, '[)')`,
         ),
       ),
@@ -100,6 +105,37 @@ export function futureStarts(date: string, starts: number[], now: Date): number[
   return starts.filter((t) => t > today.minutes); // slots.ts skips t <= now
 }
 
+export type AvailabilitySlot = AvailabilityResponse["data"]["slots"][number];
+
+/**
+ * Free start times on `date` for a job of `durationMinutes` (shared by the public and the
+ * admin availability endpoints). `excludeBookingId`: see loadOccupancy.
+ */
+export async function computeSlots(
+  db: Database,
+  query: { date: string; durationMinutes: number; excludeBookingId?: string },
+  now: Date,
+): Promise<AvailabilitySlot[]> {
+  const { date, durationMinutes, excludeBookingId } = query;
+  const settings = await loadScheduleSettings(db);
+
+  const starts = futureStarts(date, candidateStarts(durationMinutes, settings), now);
+  const occupancy = starts.length
+    ? await loadOccupancy(db, date, durationMinutes, settings, excludeBookingId)
+    : { busy: [], blocked: [] };
+
+  return starts
+    .map((t) => planJob(date, t, durationMinutes, settings))
+    .filter((job): job is PlannedJob => job !== null && !isOccupied(job, occupancy))
+    .map((job) => ({
+      time: job.time,
+      start_at: job.startAt.toISOString(),
+      end_at: job.endAt.toISOString(),
+      pickup_date: job.pickupDate,
+      pickup_time: job.pickupTime,
+    }));
+}
+
 export async function getAvailability(
   db: Database,
   query: { date: string; vehicleTypeId: string; serviceIds: string[] },
@@ -110,24 +146,11 @@ export async function getAvailability(
     query.vehicleTypeId,
     query.serviceIds,
   );
-  const settings = await loadScheduleSettings(db);
-
-  const starts = futureStarts(query.date, candidateStarts(totalDurationMinutes, settings), now);
-  const occupancy = starts.length
-    ? await loadOccupancy(db, query.date, totalDurationMinutes, settings)
-    : { busy: [], blocked: [] };
-
-  const slots = starts
-    .map((t) => planJob(query.date, t, totalDurationMinutes, settings))
-    .filter((job): job is PlannedJob => job !== null && !isOccupied(job, occupancy))
-    .map((job) => ({
-      time: job.time,
-      start_at: job.startAt.toISOString(),
-      end_at: job.endAt.toISOString(),
-      pickup_date: job.pickupDate,
-      pickup_time: job.pickupTime,
-    }));
-
+  const slots = await computeSlots(
+    db,
+    { date: query.date, durationMinutes: totalDurationMinutes },
+    now,
+  );
   return {
     date: query.date,
     vehicle_type_id: query.vehicleTypeId,
