@@ -41,7 +41,7 @@ src/
   routes/public/     index.ts: catalogue GETs; bookings.ts: /availability, /bookings
   routes/admin/      /api/admin/*: every route requires admin:access (index.ts hooks);
                      read.ts: admin reads; bookings-write.ts, catalog-write.ts,
-                     content-write.ts: admin writes
+                     content-write.ts: admin writes; gallery-upload.ts: multipart upload
   services/admin/    dashboard, bookings (list/detail/agenda), catalog (services,
                      vehicle types, gallery, blocked periods, settings);
                      *-write.service.ts: mutations (db.transaction visible per service)
@@ -52,13 +52,17 @@ src/
   services/          catalog, gallery, reviews; pricing, schedule (pure slot rules),
                      availability, booking (transaction)
   errors/            AppError + central error handler
-  plugins/           db (app.db), clock (app.clock), CORS, rate limit
+  plugins/           db (app.db), clock (app.clock), CORS, rate limit,
+                     storage (app.storage + public /uploads/gallery/* files)
+  storage/           StorageProvider interface, LocalStorageProvider (filesystem),
+                     image-types (allowlist + magic bytes), orphans (read-only report)
+  scripts/           find-orphan-uploads.ts (npm run storage:orphans)
 drizzle/             SQL migrations (see "Database")
 test/                node:test suites (PGlite)
 ```
 
 - **Booking and availability contracts** (request schemas and response shapes) live in `packages/shared`. It is linked as `"@autowascenter/shared": "file:../../packages/shared"`, so there are no root workspaces. Validation uses `safeParse` (`lib/validate.ts`), so it does not depend on which zod copy a schema comes from.
-- **Dependencies** (versions pinned exactly, locked in `package-lock.json`): `fastify` 5.12.5, `@fastify/cors` 11.3.0, `@fastify/rate-limit` 11.2.0, `jose` 6.2.12, `zod` 4.6.5, `drizzle-orm` 0.45.3, `pg` 8.23.0.
+- **Dependencies** (versions pinned exactly, locked in `package-lock.json`): `fastify` 5.12.5, `@fastify/cors` 11.3.0, `@fastify/rate-limit` 11.2.0, `@fastify/multipart` 10.1.2, `@fastify/static` 10.1.5, `jose` 6.2.12, `zod` 4.6.5, `drizzle-orm` 0.45.3, `pg` 8.23.0.
 - **Dev dependencies**: `drizzle-kit`, `typescript`, `@electric-sql/pglite`, `@types/*`.
 - **Execution**: Node ≥ 22.18 runs the TypeScript sources directly (built-in type stripping). There is no build step. `tsc --noEmit` does the type checking, and `erasableSyntaxOnly` keeps the code strippable.
 
@@ -79,6 +83,11 @@ See `.env.example`. `npm run dev` loads `.env` automatically (`--env-file-if-exi
 | `AUTH0_DOMAIN`                 | **yes in production** | —                                            | Auth0 tenant host (no `https://`). The JWKS URL `https://<domain>/.well-known/jwks.json` is derived from it. Not a secret. |
 | `AUTH0_AUDIENCE`               | **yes in production** | —                                            | Auth0 API identifier; must equal the frontend's `VITE_AUTH0_AUDIENCE`. Must be set together with `AUTH0_DOMAIN`.           |
 | `AUTH0_ISSUER`                 | no                    | `https://<AUTH0_DOMAIN>/`                    | Only needed with an Auth0 custom domain                                                                                    |
+| `UPLOAD_DIR`                   | no                    | `./uploads`                                  | Storage root (a mounted volume in production). Only `gallery/` is public; `.staging/` holds incomplete uploads.            |
+| `PUBLIC_UPLOAD_URL`            | **yes in production** | `http://localhost:<PORT>/uploads`            | Public base URL of `UPLOAD_DIR`, no trailing slash. Image URLs are built from this only, never from request headers.       |
+| `MAX_UPLOAD_BYTES`             | no                    | `10485760` (10 MiB)                          | Max size of one uploaded image (1 KiB – 50 MiB)                                                                            |
+| `UPLOAD_RATE_LIMIT_MAX`        | no                    | `30`                                         | Max `POST /api/admin/gallery/upload` requests per client IP per window                                                     |
+| `UPLOAD_RATE_LIMIT_WINDOW_MS`  | no                    | `3600000`                                    | Upload rate-limit window in ms (≥ 1000)                                                                                    |
 
 Without `AUTH0_*` (only allowed outside production), `/api/admin/*` answers **503 `AUTHENTICATION_UNAVAILABLE`**. It is never open. The API needs **no** Auth0 client secret.
 
@@ -94,15 +103,16 @@ npm run db:migrate          # apply drizzle/*.sql to DATABASE_URL
 npm run dev                 # node --watch, loads .env
 ```
 
-| Script                | What it does                                   |
-| --------------------- | ---------------------------------------------- |
-| `npm run dev`         | Development server with file watching          |
-| `npm start`           | Production-style start (`node src/server.ts`)  |
-| `npm test`            | All tests (PGlite; no database needed)         |
-| `npm run typecheck`   | `tsc --noEmit`                                 |
-| `npm run db:generate` | New migration after changing `src/db/schema/*` |
-| `npm run db:check`    | drizzle-kit consistency check of `drizzle/`    |
-| `npm run db:migrate`  | Apply migrations to `DATABASE_URL`             |
+| Script                    | What it does                                                           |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `npm run dev`             | Development server with file watching                                  |
+| `npm start`               | Production-style start (`node src/server.ts`)                          |
+| `npm test`                | All tests (PGlite; no database needed)                                 |
+| `npm run typecheck`       | `tsc --noEmit`                                                         |
+| `npm run db:generate`     | New migration after changing `src/db/schema/*`                         |
+| `npm run db:check`        | drizzle-kit consistency check of `drizzle/`                            |
+| `npm run db:migrate`      | Apply migrations to `DATABASE_URL`                                     |
+| `npm run storage:orphans` | Read-only report: orphan upload files, missing files (deletes nothing) |
 
 No local PostgreSQL has been used so far. Everything was verified with PGlite (see Testing).
 
@@ -169,7 +179,7 @@ npm test        # node --test "test/**/*.test.ts"
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `test/schema.test.ts`               | Migrations, overlap exclusion, FKs, CHECKs, triggers (26 tests)                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `test/api.test.ts`                  | Every endpoint through `app.inject()`: response shape (strict Zod contract), empty results, filters, ordering, `limit`, 400/404, CORS, **unreachable PostgreSQL** (real `pg` pool on a closed port → 503, no leaked details), unexpected DB error → 500 (19 tests)                                                                                                                                                                                                         |
-| `test/config.test.ts`               | Defaults, CORS rules, production requirements, rate-limit settings, no secrets in errors (6 tests)                                                                                                                                                                                                                                                                                                                                                                         |
+| `test/config.test.ts`               | Defaults, CORS rules, production requirements, rate-limit and upload settings, no secrets in errors (8 tests)                                                                                                                                                                                                                                                                                                                                                              |
 | `test/business-logic.test.ts`       | Pure rules: Europe/Brussels conversion incl. both DST days, slot grid, multi-day segments, blocked periods, cents and VAT rounding (15 tests)                                                                                                                                                                                                                                                                                                                              |
 | `test/booking-engine.test.ts`       | Pricing (single, several, package, package + extra/included, vehicle types, catalogue change/snapshot, invalid/inactive/unavailable), availability (free, booked, cancelled, blocked, opening hours, multi-day, adjacent, overlap start/end/contained, today/past, DST), booking creation, **concurrency** (two simultaneous bookings → 1 success + 1 conflict), exclusion-constraint fallback → 409, rollback (28 tests)                                                  |
 | `test/bookings-api.test.ts`         | HTTP: availability and booking contracts, validation, rejected client-supplied totals/status/token, 404/409/422, concurrent POSTs, CORS preflight, rate limit 429, database failure (13 tests)                                                                                                                                                                                                                                                                             |
@@ -177,6 +187,8 @@ npm test        # node --test "test/**/*.test.ts"
 | `test/admin-bookings-write.test.ts` | Admin booking writes: server-side pricing/duration/times/snapshots/cancel token, multi-day, client totals rejected, 404/409/422; moves (into another booking → 409, overlapping its own old time → allowed via self-exclusion, date/time, past, off-grid, price kept); service and vehicle-type changes re-priced; statuses incl. cancel (cancelled_at) and reactivation with overlap re-check; delete; admin availability with `exclude_booking_id`; integrity (17 tests) |
 | `test/admin-write.test.ts`          | Auth matrix for all 18 write endpoints (401/401/403 with nothing changed, admin success); services (UI defaults + rows for every vehicle type, validation, delete keeps snapshots), package contents (replace, invalid → unchanged), vehicle types (defaults, slug 409, delete in use → 409 `RESOURCE_IN_USE`), pricing matrix (upsert, any invalid row → no change), blocked periods, settings (merge validation, missing → 500), gallery metadata (20 tests)             |
 | `test/admin-rollback.test.ts`       | **Forced mid-transaction failures** (test trigger): service + rows, vehicle type + rows, package contents A,B → A,C, booking + lines (admin and public), booking service change, pricing matrix A,B,C → nothing partial (7 tests)                                                                                                                                                                                                                                          |
+| `test/storage-provider.test.ts`     | `LocalStorageProvider` in a temp dir: put (UUID name, move from staging), extension allowlist, `publicUrl`, ownership (`keyFromPublicUrl` rejects Supabase/other hosts/traversal/encoding), delete (deleted/missing/invalid key, symlink not followed — skipped where symlinks need privileges), list (9 tests)                                                                                                                                                            |
+| `test/gallery-upload.test.ts`       | Upload JPEG/PNG/WebP, invalid MIME, fake magic bytes, too large (413), malformed multipart, 401/403, metadata + lists, generated names, traversal via file name, canonical public URL, rate limit, no storage → 503, DB failure → file removed, failed compensation logged, logs; public files with cache headers and no traversal/listing/staging; delete of managed/external/missing/shared files; orphan report (29 tests)                                              |
 | `test/admin-read.test.ts`           | Admin read API: auth matrix (no/invalid token → 401, no permission → 403 even with role/e-mail claims, admin → 200) for all 9 endpoints; 400 for bad or unknown parameters; 404 for unknown bookings; strict contracts; data: dashboard aggregates, pagination, detail with snapshots and no `cancel_token`, multi-day agenda, catalogue, pricing matrix, settings (missing → 500), gallery (19 tests)                                                                     |
 
 **PGlite** (`@electric-sql/pglite`, dev only) is the real PostgreSQL engine compiled to WASM, running in-process with `btree_gist`. `test/helpers/test-db.ts` applies all migrations from `drizzle/`, so the tests run against the production schema. No external database, Docker or production data is used. The unreachable-database tests are the only ones that use the `pg` driver; they need no running server.
@@ -215,4 +227,5 @@ npm test        # node --test "test/**/*.test.ts"
   - That is fine for one API process. With several replicas every replica counts separately, so a shared store (e.g. Redis) is needed.
   - Behind the proxy, enable `trustProxy`; otherwise all clients share the proxy's IP and the limit applies to everyone together.
 - **Auth0**: set `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` (required in production) and complete `docs/AUTH0-SETUP.md`. The API only fetches Auth0's public keys; it needs outbound HTTPS to the Auth0 domain.
-- **Not production-ready yet**: no admin CRUD, no Docker image, and no parallel-race test on a real PostgreSQL. These are planned phases.
+- **Uploads**: `UPLOAD_DIR` must be a persistent volume, writable only by the API user, and part of the backups (together with the database: rows reference files). Set `PUBLIC_UPLOAD_URL` to the public `/uploads` URL. Either let the API serve `/uploads/gallery/*` or let the reverse proxy serve **only** `UPLOAD_DIR/gallery` with the same headers. `npm run storage:orphans` prints a read-only consistency report. See `docs/GALLERY-STORAGE-MIGRATION.md`.
+- **Not production-ready yet**: the admin frontend is not connected yet, no Docker image, and no parallel-race test on a real PostgreSQL. These are planned phases.

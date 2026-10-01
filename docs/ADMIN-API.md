@@ -207,12 +207,18 @@ The shape is always `{ "error": { "code", "message" } }`. There is never SQL, a 
 | 409    | `BOOKING_SLOT_UNAVAILABLE`      | Overlap with another booking or a blocked period (exclusion constraint included)          |
 | 409    | `RESOURCE_CONFLICT`             | Unique value already taken (vehicle type slug)                                            |
 | 409    | `RESOURCE_IN_USE`               | Vehicle type still referenced by bookings (`ON DELETE RESTRICT`)                          |
+| 400    | `EMPTY_FILE`                    | Gallery upload: the file has 0 bytes                                                      |
+| 400    | `MALFORMED_MULTIPART`           | Gallery upload: truncated or malformed multipart body                                     |
+| 413    | `FILE_TOO_LARGE`                | Gallery upload: file larger than `MAX_UPLOAD_BYTES`                                       |
+| 415    | `UNSUPPORTED_MEDIA_TYPE`        | Gallery upload: not multipart, or not a real JPEG/PNG/WebP (MIME type and magic bytes)    |
+| 429    | `RATE_LIMITED`                  | Gallery upload: more than `UPLOAD_RATE_LIMIT_MAX` uploads per window                      |
 | 422    | `BOOKING_OUTSIDE_OPENING_HOURS` | Start before opening, work not fitting the window, or off the slot grid                   |
 | 422    | `BOOKING_IN_PAST`               | New date/time before "now" (Europe/Brussels)                                              |
 | 500    | `SETTINGS_NOT_CONFIGURED`       | No `site_settings` row                                                                    |
 | 500    | `INTERNAL_ERROR`                | Unexpected error, including a failed transaction (details only in the server log)         |
 | 503    | `DATABASE_UNAVAILABLE`          | Database unreachable                                                                      |
 | 503    | `AUTHENTICATION_UNAVAILABLE`    | Auth0 keys unreachable or Auth0 not configured                                            |
+| 503    | `STORAGE_UNAVAILABLE`           | Gallery upload: file storage not configured                                               |
 
 Constraint violations that a service did not translate itself are mapped centrally, with a generic message and no SQL:
 
@@ -294,18 +300,48 @@ All writes (phase 6B) share these rules:
 
 ### Blocked periods, settings, gallery
 
-| METHOD / PATH                           | BODY                                                                                                                                                                   | RESPONSE                           | ERRORS   | TABLES            | TRANSACTION             |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------- | ----------------- | ----------------------- |
-| `POST /api/admin/blocked-periods`       | `start_date`, `end_date` (`start ≤ end`), optional `start_time`, `end_time` (`HH:mm`, `start < end` when both are set), `reason`                                       | 201 `{ data: AdminBlockedPeriod }` | 400      | `blocked_periods` | One statement           |
-| `DELETE /api/admin/blocked-periods/:id` | —                                                                                                                                                                      | 204                                | 400, 404 | `blocked_periods` | One statement           |
-| `PATCH /api/admin/settings`             | At least one of `km_fee`, `free_km`, `base_address`, `base_city`, `opening_hour`, `closing_hour`, `slot_interval_minutes` (1–1440), `notification_email` (`""` → null) | 200 `{ data: settings }`           | 400, 500 | `site_settings`   | Yes (row lock + update) |
-| `POST /api/admin/gallery`               | `image_url` (absolute path or http(s) URL), optional `title`, `description`, `sort_order` (default: number of items)                                                   | 201 `{ data: AdminGalleryItem }`   | 400      | `gallery_items`   | One statement           |
-| `PATCH /api/admin/gallery/:id`          | At least one of `title`, `description`, `sort_order` (the fields the UI edits)                                                                                         | 200 `{ data: AdminGalleryItem }`   | 400, 404 | `gallery_items`   | One statement           |
-| `DELETE /api/admin/gallery/:id`         | —                                                                                                                                                                      | 204                                | 400, 404 | `gallery_items`   | One statement           |
+| METHOD / PATH                           | BODY                                                                                                                                                                   | RESPONSE                           | ERRORS                  | TABLES                    | TRANSACTION                              |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------- | ------------------------- | ---------------------------------------- |
+| `POST /api/admin/blocked-periods`       | `start_date`, `end_date` (`start ≤ end`), optional `start_time`, `end_time` (`HH:mm`, `start < end` when both are set), `reason`                                       | 201 `{ data: AdminBlockedPeriod }` | 400                     | `blocked_periods`         | One statement                            |
+| `DELETE /api/admin/blocked-periods/:id` | —                                                                                                                                                                      | 204                                | 400, 404                | `blocked_periods`         | One statement                            |
+| `PATCH /api/admin/settings`             | At least one of `km_fee`, `free_km`, `base_address`, `base_city`, `opening_hour`, `closing_hour`, `slot_interval_minutes` (1–1440), `notification_email` (`""` → null) | 200 `{ data: settings }`           | 400, 500                | `site_settings`           | Yes (row lock + update)                  |
+| `POST /api/admin/gallery`               | `image_url` (absolute path or http(s) URL), optional `title`, `description`, `sort_order` (default: number of items)                                                   | 201 `{ data: AdminGalleryItem }`   | 400                     | `gallery_items`           | One statement                            |
+| `PATCH /api/admin/gallery/:id`          | At least one of `title`, `description`, `sort_order` (the fields the UI edits)                                                                                         | 200 `{ data: AdminGalleryItem }`   | 400, 404                | `gallery_items`           | One statement                            |
+| `DELETE /api/admin/gallery/:id`         | —                                                                                                                                                                      | 204                                | 400, 404                | `gallery_items`           | One statement, then the managed file(s)  |
+| `POST /api/admin/gallery/upload`        | `multipart/form-data`: `file` (one JPEG/PNG/WebP), optional `title`, `description`, `sort_order` — see [Gallery upload](#gallery-upload-phase-6c)                      | 201 `{ data: AdminGalleryItem }`   | 400, 413, 415, 429, 503 | `gallery_items` + storage | File first, then one insert; compensated |
 
 - **Blocked periods**: there is no PATCH, because the current UI cannot edit them.
 - **Settings**: the merged result must keep `opening_hour < closing_hour`. The single row is updated in place.
-- **Gallery**: metadata only. **No upload, and no deletion of stored files** (phase 6C).
+- **Gallery**: `POST /api/admin/gallery` stays metadata-only (an existing absolute path or http(s) URL, e.g. an old Supabase URL). New images go through the upload endpoint below.
+
+### Gallery upload (phase 6C)
+
+`POST /api/admin/gallery/upload` — `admin:access`, `Content-Type: multipart/form-data`.
+
+| PART          | TYPE                     | RULES                                                                                                                  |
+| ------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `file`        | file, **exactly one**    | `image/jpeg`, `image/png` or `image/webp`; content must match (magic bytes); 1 B … `MAX_UPLOAD_BYTES` (default 10 MiB) |
+| `title`       | text, optional           | Trimmed, max 200; `""` → null                                                                                          |
+| `description` | text, optional           | Trimmed, max 2000; `""` → null                                                                                         |
+| `sort_order`  | text (integer), optional | `0`–`1000000`; default: number of gallery items (as in the current UI)                                                 |
+
+Any other part (`image_url`, `category`, `before_image`, a second file, duplicate fields) → 400. The client's file name is ignored: the server stores `gallery/<uuid v4>.<jpg|png|webp>` and the response contains only the public URL built from `PUBLIC_UPLOAD_URL`, never a filesystem path.
+
+```http
+POST /api/admin/gallery/upload
+Authorization: Bearer <access token>
+Content-Type: multipart/form-data; boundary=...
+
+file=<image bytes>; title=Polijstbeurt; sort_order=3
+```
+
+```json
+201 { "data": { "id": "…", "image_url": "https://autowascenter.be/uploads/gallery/0b0e4d4c-….jpg", "before_image_url": null, "title": "Polijstbeurt", "description": null, "category": null, "sort_order": 3, "created_at": "…", "updated_at": "…" } }
+```
+
+Rate limit: `UPLOAD_RATE_LIMIT_MAX` (default 30) per `UPLOAD_RATE_LIMIT_WINDOW_MS` (default 1 h) per client IP, separate from the booking limit. Flow and failure handling: `docs/GALLERY-STORAGE-MIGRATION.md`.
+
+**`DELETE /api/admin/gallery/:id` (changed in 6C)**: deletes the row, then the backing file of `image_url` and `before_image_url` **only if** the storage provider recognises the URL as its own (exact `PUBLIC_UPLOAD_URL/gallery/<uuid>.<ext>`) and no other row (gallery, services, vehicle types) still refers to it. External URLs — including old Supabase Storage URLs — are never deleted. A missing file or a failed file delete is logged; the response is still 204 (the row is gone), and the file shows up in `npm run storage:orphans`.
 
 ## Date/time semantics
 

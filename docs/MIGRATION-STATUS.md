@@ -2,19 +2,20 @@
 
 Migratie van het Lovable/Supabase-project naar een self-hosted platform met Docker Compose.
 
-| Fase                                               | Status                                                                        |
-| -------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Fase 0: beveiligen + baseline                      | **Afgerond** (zie _Completed_)                                                |
-| Fase 0.5: reproduceerbare baseline                 | **Afgerond** (zie _Baseline v1_)                                              |
-| Fase 1: Supabase database-inventaris               | **Afgerond** (`docs/DATABASE-INVENTORY.md`, `docs/DATABASE-MIGRATION-MAP.md`) |
-| Fase 2: PostgreSQL-databaselaag (Drizzle)          | **Afgerond** (zie _Phase 2: database layer_)                                  |
-| Fase 3: API-skelet + publieke reads (Fastify)      | **Afgerond** (zie _Phase 3: public read API_)                                 |
-| Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                  |
-| Fase 5: Auth0 authentication + authorization       | **Afgerond** (zie _Phase 5_); ⚠ admin-datapagina's werken pas weer na Fase 6  |
-| Fase 6A: admin-API read-side                       | **Afgerond** (zie _Phase 6A_); frontend nog niet aangesloten                  |
-| Fase 6B: admin-API write-side                      | **Afgerond** (zie _Phase 6B_); frontend nog niet aangesloten                  |
-| Volgende fase                                      | **Gallery storage/uploads and remaining admin data integrations** (6C)        |
-| Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)             |
+| Fase                                               | Status                                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Fase 0: beveiligen + baseline                      | **Afgerond** (zie _Completed_)                                                 |
+| Fase 0.5: reproduceerbare baseline                 | **Afgerond** (zie _Baseline v1_)                                               |
+| Fase 1: Supabase database-inventaris               | **Afgerond** (`docs/DATABASE-INVENTORY.md`, `docs/DATABASE-MIGRATION-MAP.md`)  |
+| Fase 2: PostgreSQL-databaselaag (Drizzle)          | **Afgerond** (zie _Phase 2: database layer_)                                   |
+| Fase 3: API-skelet + publieke reads (Fastify)      | **Afgerond** (zie _Phase 3: public read API_)                                  |
+| Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                   |
+| Fase 5: Auth0 authentication + authorization       | **Afgerond** (zie _Phase 5_); ⚠ admin-datapagina's werken pas weer na Fase 6   |
+| Fase 6A: admin-API read-side                       | **Afgerond** (zie _Phase 6A_); frontend nog niet aangesloten                   |
+| Fase 6B: admin-API write-side                      | **Afgerond** (zie _Phase 6B_); frontend nog niet aangesloten                   |
+| Fase 6C: gallery storage (self-hosted)             | **Afgerond** (zie _Phase 6C_); frontend en bestaande bestanden niet gemigreerd |
+| Volgende fase                                      | **Admin frontend migration from Supabase to own API** (6D)                     |
+| Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
 
@@ -162,6 +163,27 @@ Specificatie: `docs/ADMIN-API.md` (sectie _Writes_). Mapping en atomiciteitsmatr
 - **Storage**: **NOT MIGRATED**, gepland voor Fase 6C.
 
 **Next phase: "Gallery storage/uploads and remaining admin data integrations"**
+
+## Phase 6C — Gallery Storage
+
+**Status: COMPLETE**
+
+Specificatie: `docs/GALLERY-STORAGE-MIGRATION.md`; endpoints: `docs/ADMIN-API.md` (_Gallery upload_).
+
+- **Local storage**: `StorageProvider`-interface met `LocalStorageProvider` (lokaal filesystem, Docker-volume-ready). `UPLOAD_DIR/gallery/<uuid v4>.<jpg|png|webp>` is publiek; `UPLOAD_DIR/.staging/` is privé. Nieuwe env-variabelen: `UPLOAD_DIR`, `PUBLIC_UPLOAD_URL` (verplicht in productie), `MAX_UPLOAD_BYTES` (standaard 10 MiB), `UPLOAD_RATE_LIMIT_MAX` (30), `UPLOAD_RATE_LIMIT_WINDOW_MS` (1 uur).
+- **Upload API**: `POST /api/admin/gallery/upload` (`admin:access`, multipart, precies één bestand `file` plus `title`, `description`, `sort_order`). Flow: staging → validatie (MIME-allowlist + magic bytes, grootte tijdens het streamen) → definitieve naam → DB-insert → 201 met de publieke URL. Faalt de insert, dan wordt het bestand weer verwijderd (compensatie).
+- **Delete behavior**: `DELETE /api/admin/gallery/:id` verwijdert de rij en daarna alleen bestanden die de provider als eigen herkent (exacte canonieke URL) en die door geen andere rij meer gebruikt worden. Externe en Supabase-URL's worden nooit verwijderd. Bestandsfouten na de delete worden gelogd (204).
+- **Public file serving**: `GET /uploads/gallery/*` via `@fastify/static`, met als root precies `UPLOAD_DIR/gallery`; geen listing, geen dotfiles, alleen UUID-namen en reguliere bestanden. Headers: `Cache-Control: public, max-age=31536000, immutable`, `nosniff` en CSP `default-src 'none'; sandbox`.
+- **Security**: bestandsnamen komen altijd van de server; geen SVG; strikte key-validatie tegen path traversal; ownership-check in de provider; een aparte rate limit; geen paden, tokens of multipart-inhoud in responses of logs. Een read-only orphan-rapport: `npm run storage:orphans` (geen automatische cleanup).
+- **Dependencies**: `@fastify/multipart` 10.1.2 en `@fastify/static` 10.1.5 (exact vastgepind). Geen dependency voor magic bytes; drie signaturen in `storage/image-types.ts`.
+- **Tests**: `apps/api` heeft nu **226 tests: 225 geslaagd, 1 overgeslagen** (de symlinktest, omdat symlinks op deze Windows-machine niet zonder extra rechten aangemaakt kunnen worden). Nieuw: 9 provider-tests, 29 upload/serve/delete-tests (de 20 gevraagde scenario's plus rate limit, 503, compensatiefout, logs, gedeelde verwijzingen, `before_image_url`, DB-delete-fout, orphan-rapport) en 1 config-test. Alles draait in tijdelijke directories onder `os.tmpdir()`.
+- **Bug gevonden en opgelost tijdens het testen**: bij een afgekapte multipart-body sloot het plugin de bestandsstream terwijl de route nog op het staging-bestand wachtte, waardoor `pipeline()` nooit eindigde en de request bleef hangen (ook via echte HTTP). De route controleert nu de streamstatus en geeft 400 `MALFORMED_MULTIPART`.
+- **Supabase status**: ongewijzigd. `@supabase/supabase-js`, `src/integrations/supabase/` en `supabase/` blijven bestaan; de bucket `gallery` wordt nog door de frontend gebruikt.
+- **Data migration status**: **NOT MIGRATED**. Bestaande `image_url`-waarden wijzen nog naar Supabase en blijven werken; het stappenplan staat in `docs/GALLERY-STORAGE-MIGRATION.md` (_Future data migration_).
+- **Frontend status**: **NOT MIGRATED**. `src/routes/admin/galerij.tsx` uploadt nog naar Supabase.
+- **Docker**: **NOT IMPLEMENTED**; de benodigde volume-mount is gedocumenteerd (_Future Docker volume_).
+
+**Next phase: "Admin frontend migration from Supabase to own API"**
 
 ## Current architecture
 

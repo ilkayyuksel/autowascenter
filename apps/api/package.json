@@ -14,12 +14,15 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "drizzle-kit migrate",
+    "storage:orphans": "node --env-file-if-exists=.env src/scripts/find-orphan-uploads.ts",
     "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@autowascenter/shared": "file:../../packages/shared",
     "@fastify/cors": "11.3.0",
+    "@fastify/multipart": "10.1.2",
     "@fastify/rate-limit": "11.2.0",
+    "@fastify/static": "10.1.5",
     "drizzle-orm": "0.45.3",
     "fastify": "5.12.5",
     "jose": "6.2.12",

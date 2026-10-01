@@ -1,4 +1,4 @@
-// Admin writes for blocked periods, settings and gallery metadata (6B). No uploads.
+// Admin writes for blocked periods, settings and gallery metadata (6B). Uploads: gallery-upload.ts.
 // Authorization: parent plugin (admin:access).
 
 import type { FastifyInstance } from "fastify";
@@ -49,7 +49,7 @@ export async function adminContentWriteRoutes(app: FastifyInstance) {
 
   app.delete("/gallery/:id", async (request, reply) => {
     const { id } = parseOrThrow(idParams, request.params);
-    await deleteGalleryItem(app.db, id);
+    await deleteGalleryItem(app.db, id, app.storage, request.log);
     return reply.code(204).send();
   });
 }

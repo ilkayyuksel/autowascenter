@@ -46,6 +46,61 @@ describe("loadConfig", () => {
     );
   });
 
+  test("uploads: development defaults, configurable limits, PUBLIC_UPLOAD_URL rules", () => {
+    assert.deepEqual(loadConfig({ DATABASE_URL: DB, PORT: "3005" }).uploads, {
+      dir: "./uploads",
+      publicBaseUrl: "http://localhost:3005/uploads",
+      maxBytes: 10 * 1024 * 1024,
+      rateLimit: { max: 30, timeWindowMs: 3_600_000 },
+    });
+    assert.deepEqual(
+      loadConfig({
+        DATABASE_URL: DB,
+        UPLOAD_DIR: "/var/lib/autowascenter/uploads",
+        PUBLIC_UPLOAD_URL: "https://autowascenter.be/uploads",
+        MAX_UPLOAD_BYTES: "2048",
+        UPLOAD_RATE_LIMIT_MAX: "5",
+        UPLOAD_RATE_LIMIT_WINDOW_MS: "60000",
+      }).uploads,
+      {
+        dir: "/var/lib/autowascenter/uploads",
+        publicBaseUrl: "https://autowascenter.be/uploads",
+        maxBytes: 2048,
+        rateLimit: { max: 5, timeWindowMs: 60_000 },
+      },
+    );
+    for (const bad of [
+      "https://a.be/uploads/",
+      "ftp://a.be/uploads",
+      "https://a.be/u?x=1",
+      "/uploads",
+    ]) {
+      assert.throws(
+        () => loadConfig({ DATABASE_URL: DB, PUBLIC_UPLOAD_URL: bad }),
+        /PUBLIC_UPLOAD_URL/,
+      );
+    }
+    assert.throws(
+      () => loadConfig({ DATABASE_URL: DB, MAX_UPLOAD_BYTES: "0" }),
+      /MAX_UPLOAD_BYTES/,
+    );
+    assert.throws(
+      () => loadConfig({ DATABASE_URL: DB, MAX_UPLOAD_BYTES: String(51 * 1024 * 1024) }),
+      /MAX_UPLOAD_BYTES/,
+    );
+    assert.throws(
+      () =>
+        loadConfig({
+          NODE_ENV: "production",
+          DATABASE_URL: DB,
+          CORS_ORIGIN: "https://a.be",
+          AUTH0_DOMAIN: "tenant.eu.auth0.com",
+          AUTH0_AUDIENCE: "x",
+        }),
+      /PUBLIC_UPLOAD_URL: required in production/,
+    );
+  });
+
   test("requires DATABASE_URL", () => {
     assert.throws(() => loadConfig({}), /DATABASE_URL/);
   });
@@ -62,12 +117,18 @@ describe("loadConfig", () => {
       CORS_ORIGIN: "https://autowascenter.be",
       AUTH0_DOMAIN: "tenant.eu.auth0.com",
       AUTH0_AUDIENCE: "https://api.autowascenter.be",
+      PUBLIC_UPLOAD_URL: "https://autowascenter.be/uploads",
     });
     assert.equal(ok.isProduction, true);
   });
 
   test("Auth0: required in production, derived issuer and JWKS URL, optional in development", () => {
-    const prod = { NODE_ENV: "production", DATABASE_URL: DB, CORS_ORIGIN: "https://a.be" };
+    const prod = {
+      NODE_ENV: "production",
+      DATABASE_URL: DB,
+      CORS_ORIGIN: "https://a.be",
+      PUBLIC_UPLOAD_URL: "https://a.be/uploads",
+    };
     assert.throws(() => loadConfig(prod), /AUTH0_DOMAIN: required in production/);
 
     const config = loadConfig({

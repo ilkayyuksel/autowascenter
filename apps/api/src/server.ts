@@ -4,6 +4,7 @@ import { createApp } from "./app.ts";
 import { createAuth0Verifier } from "./auth/verifier.ts";
 import { loadConfig, type Config } from "./config/env.ts";
 import { createDb } from "./db/index.ts";
+import { LocalStorageProvider } from "./storage/local-storage-provider.ts";
 
 /**
  * Starts the API: one connection pool per process, HTTP listener, graceful shutdown.
@@ -11,12 +12,18 @@ import { createDb } from "./db/index.ts";
  */
 export async function startServer(config: Config = loadConfig()) {
   const { db, pool } = createDb(config.databaseUrl);
+  const storage = await LocalStorageProvider.create({
+    rootDir: config.uploads.dir,
+    publicBaseUrl: config.uploads.publicBaseUrl,
+  });
   const app = await createApp({
     db,
     corsOrigins: config.corsOrigins,
     logLevel: config.logLevel,
     bookingRateLimit: config.bookingRateLimit,
     tokenVerifier: config.auth0 ? createAuth0Verifier(config.auth0) : null,
+    storage,
+    uploads: config.uploads,
   });
   if (!config.auth0) {
     app.log.warn("AUTH0_DOMAIN/AUTH0_AUDIENCE not set: admin endpoints answer 503");

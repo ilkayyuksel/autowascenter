@@ -63,11 +63,14 @@ HTTP API of the self-hosted backend (`apps/api`).
 | POST   | `/api/admin/blocked-periods`              | Create a blocked period                                        |
 | DELETE | `/api/admin/blocked-periods/:id`          | Delete a blocked period                                        |
 | PATCH  | `/api/admin/settings`                     | Update the site settings                                       |
-| POST   | `/api/admin/gallery`                      | Create gallery item metadata (no upload)                       |
+| POST   | `/api/admin/gallery`                      | Create gallery item metadata for an existing URL (no upload)   |
+| POST   | `/api/admin/gallery/upload`               | Upload one image (multipart) + create the gallery item (6C)    |
 | PATCH  | `/api/admin/gallery/:id`                  | Update gallery item metadata                                   |
-| DELETE | `/api/admin/gallery/:id`                  | Delete gallery item metadata                                   |
+| DELETE | `/api/admin/gallery/:id`                  | Delete the item + its self-hosted file (never external URLs)   |
 
 The admin endpoints are specified in **`docs/ADMIN-API.md`**: parameters and bodies, strict contracts, pagination, transactions, errors (including 404 `RESOURCE_NOT_FOUND`, 409 `RESOURCE_CONFLICT`/`RESOURCE_IN_USE` and 500 `SETTINGS_NOT_CONFIGURED`) and date/time semantics. The write mapping is in `docs/ADMIN-WRITE-MIGRATION-MAP.md`. All admin endpoints use the same authorization as `/api/admin/me` below. CORS additionally allows `PATCH`, `PUT` and `DELETE` (admin only).
+
+**Public files (phase 6C)**: `GET /uploads/gallery/<uuid>.<jpg|png|webp>` serves uploaded gallery images without authentication, with `Cache-Control: public, max-age=31536000, immutable`, `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`. Only that directory and only server-generated names are served; everything else is 404. See `docs/GALLERY-STORAGE-MIGRATION.md`.
 
 The catalogue and health endpoints are unchanged from phase 3 and are documented in `apps/api/README.md`.
 

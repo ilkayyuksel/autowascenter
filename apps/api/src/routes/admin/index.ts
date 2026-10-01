@@ -4,6 +4,7 @@ import { ADMIN_ACCESS } from "../../auth/principal.ts";
 import { adminBookingWriteRoutes } from "./bookings-write.ts";
 import { adminCatalogWriteRoutes } from "./catalog-write.ts";
 import { adminContentWriteRoutes } from "./content-write.ts";
+import { adminGalleryUploadRoutes, type GalleryUploadOptions } from "./gallery-upload.ts";
 import { adminReadRoutes } from "./read.ts";
 
 /**
@@ -12,7 +13,11 @@ import { adminReadRoutes } from "./read.ts";
  * otherwise) with the `admin:access` permission (403 otherwise). Individual routes cannot
  * opt out, and no request parameter influences authorization.
  */
-export async function adminRoutes(app: FastifyInstance) {
+export interface AdminRoutesOptions {
+  galleryUpload: GalleryUploadOptions;
+}
+
+export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions) {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requirePermission(ADMIN_ACCESS));
 
@@ -26,4 +31,5 @@ export async function adminRoutes(app: FastifyInstance) {
   await app.register(adminBookingWriteRoutes);
   await app.register(adminCatalogWriteRoutes);
   await app.register(adminContentWriteRoutes);
+  await app.register(adminGalleryUploadRoutes, opts.galleryUpload);
 }

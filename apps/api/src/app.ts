@@ -8,10 +8,12 @@ import { registerClock } from "./plugins/clock.ts";
 import { registerCors } from "./plugins/cors.ts";
 import { registerDatabase } from "./plugins/db.ts";
 import { registerRateLimit, type BookingRateLimit } from "./plugins/rate-limit.ts";
+import { isLocalStorage, registerStorage, uploadsStaticRoutes } from "./plugins/storage.ts";
 import { adminRoutes } from "./routes/admin/index.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { bookingRoutes } from "./routes/public/bookings.ts";
 import { publicRoutes } from "./routes/public/index.ts";
+import type { StorageProvider } from "./storage/storage-provider.ts";
 
 export interface AppOptions {
   db: Database;
@@ -23,6 +25,12 @@ export interface AppOptions {
    * routes then answer 503 (they are never left open). Tests inject a local-key verifier.
    */
   tokenVerifier?: TokenVerifier | null;
+  /**
+   * File storage for gallery uploads. null = not configured: uploads answer 503, deletes
+   * remove rows only. A LocalStorageProvider is also served under /uploads/gallery/.
+   */
+  storage?: StorageProvider | null;
+  uploads?: { maxBytes: number; rateLimit: { max: number; timeWindowMs: number } };
   /** Injectable clock for tests; defaults to the system clock. */
   clock?: () => Date;
   /** Test seam: where log lines go (defaults to stdout). */
@@ -30,6 +38,7 @@ export interface AppOptions {
 }
 
 const DEFAULT_BOOKING_RATE_LIMIT: BookingRateLimit = { max: 10, timeWindowMs: 60_000 };
+const DEFAULT_UPLOADS = { maxBytes: 10_485_760, rateLimit: { max: 30, timeWindowMs: 3_600_000 } };
 
 /**
  * Builds the Fastify application without opening a port.
@@ -41,6 +50,8 @@ export async function createApp({
   logLevel = "info",
   bookingRateLimit = DEFAULT_BOOKING_RATE_LIMIT,
   tokenVerifier = null,
+  storage = null,
+  uploads = DEFAULT_UPLOADS,
   clock,
   logStream,
 }: AppOptions) {
@@ -57,6 +68,7 @@ export async function createApp({
   registerDatabase(app, db);
   registerClock(app, clock);
   registerAuth(app, tokenVerifier);
+  registerStorage(app, storage);
   registerErrorHandling(app);
   await registerCors(app, corsOrigins);
   await registerRateLimit(app);
@@ -66,7 +78,9 @@ export async function createApp({
   await app.register(publicRoutes, { prefix: "/api" });
   await app.register(bookingRoutes, { prefix: "/api", bookingRateLimit });
   // Protected: valid Auth0 access token + admin:access permission.
-  await app.register(adminRoutes, { prefix: "/api/admin" });
+  await app.register(adminRoutes, { prefix: "/api/admin", galleryUpload: uploads });
+  // Public, read-only: uploaded gallery images.
+  if (isLocalStorage(storage)) await app.register(uploadsStaticRoutes, storage);
 
   return app;
 }

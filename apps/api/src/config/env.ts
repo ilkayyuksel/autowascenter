@@ -27,6 +27,23 @@ const envSchema = z
       .string()
       .regex(/^https:\/\/[^/]+\/$/, "must look like https://<domain>/")
       .optional(),
+    /** Root of the local file storage (a Docker volume in production). */
+    UPLOAD_DIR: z.string().min(1).default("./uploads"),
+    /** Public base URL of uploaded files, without trailing slash; required in production. */
+    PUBLIC_UPLOAD_URL: z
+      .string()
+      .regex(/^https?:\/\/[^\s?#]+[^/\s?#]$/, "must be an http(s) URL without trailing slash")
+      .optional(),
+    /** Max size of one uploaded file (default 10 MiB). */
+    MAX_UPLOAD_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(50 * 1024 * 1024)
+      .default(10_485_760),
+    /** POST /api/admin/gallery/upload: max uploads per client IP per window. */
+    UPLOAD_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(30),
+    UPLOAD_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(3_600_000),
   })
   .transform((env, ctx) => {
     const rawOrigins = env.CORS_ORIGIN ?? (env.NODE_ENV === "production" ? "" : DEV_CORS_ORIGIN);
@@ -46,7 +63,7 @@ const envSchema = z
           message: '"*" is not allowed in production',
         });
       }
-      for (const key of ["AUTH0_DOMAIN", "AUTH0_AUDIENCE"] as const) {
+      for (const key of ["AUTH0_DOMAIN", "AUTH0_AUDIENCE", "PUBLIC_UPLOAD_URL"] as const) {
         if (!env[key])
           ctx.addIssue({ code: "custom", path: [key], message: "required in production" });
       }
@@ -83,6 +100,16 @@ const envSchema = z
         timeWindowMs: env.BOOKING_RATE_LIMIT_WINDOW_MS,
       },
       auth0,
+      uploads: {
+        dir: env.UPLOAD_DIR,
+        // Development default: served by this API on its own port.
+        publicBaseUrl: env.PUBLIC_UPLOAD_URL ?? `http://localhost:${env.PORT}/uploads`,
+        maxBytes: env.MAX_UPLOAD_BYTES,
+        rateLimit: {
+          max: env.UPLOAD_RATE_LIMIT_MAX,
+          timeWindowMs: env.UPLOAD_RATE_LIMIT_WINDOW_MS,
+        },
+      },
     };
   });
 
