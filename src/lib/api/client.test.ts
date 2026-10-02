@@ -304,3 +304,15 @@ describe("admin writes (POST, PATCH, PUT, DELETE, multipart)", () => {
     assert.equal(calls.length, 0);
   });
 });
+
+describe("public POST", () => {
+  test("post(): JSON body, never an Authorization header, even with a token provider", async () => {
+    const { api, calls, tokenRequests } = client(() => jsonResponse(201, OK));
+    assert.deepEqual(await api.post("/api/bookings", { a: 1 }, okSchema), OK);
+    assert.equal(calls[0]!.method, "POST");
+    assert.equal(calls[0]!.headers.get("content-type"), "application/json");
+    assert.equal(calls[0]!.headers.has("authorization"), false);
+    assert.equal(tokenRequests(), 0);
+    assert.deepEqual(calls[0]!.json, { a: 1 });
+  });
+});

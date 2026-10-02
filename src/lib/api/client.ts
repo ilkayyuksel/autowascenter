@@ -1,7 +1,7 @@
 // Central, typed client for the self-hosted API (VITE_API_BASE_URL). The only place in the
 // frontend that calls fetch() for the API.
 //
-// - get():       public endpoints, never sends a token.
+// - get(), post(): public endpoints, never send a token (e.g. POST /api/bookings).
 // - getAdmin(), postAdmin(), patchAdmin(), putAdmin(), deleteAdmin(), postAdminForm():
 //                /api/admin/* endpoints; ask the injected getAccessToken (Auth0
 //                getAccessTokenSilently) for an ACCESS token and send it as a Bearer header.
@@ -71,6 +71,13 @@ export interface ApiClientOptions {
 
 export interface ApiClient {
   get<T>(path: string, schema: ResponseSchema<T>, options?: RequestOptions): Promise<T>;
+  /** Public JSON POST, without any token. */
+  post<T>(
+    path: string,
+    body: unknown,
+    schema: ResponseSchema<T>,
+    options?: RequestOptions,
+  ): Promise<T>;
   getAdmin<T>(path: string, schema: ResponseSchema<T>, options?: RequestOptions): Promise<T>;
   postAdmin<T>(
     path: string,
@@ -226,6 +233,8 @@ export function createApiClient({
 
   return {
     get: (path, schema, options = {}) => request("GET", path, null, schema, options, null),
+    post: (path, body, schema, options = {}) =>
+      request("POST", path, { kind: "json", value: body }, schema, options, null),
     getAdmin: async (path, schema, options = {}) =>
       request("GET", path, null, schema, options, await accessToken()),
     postAdmin: async (path, body, schema, options = {}) =>

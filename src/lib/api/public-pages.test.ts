@@ -1,6 +1,6 @@
 // Source-level guarantees for the public pages after phase 7A: their data comes from the
-// own public API (public-reads.ts), not from Supabase. The only Supabase use left on the
-// public side is the booking submit of /reservatie (phase 7B).
+// own public API (public-reads.ts / public-writes.ts), not from Supabase. Since phase 7B
+// no public page reads from or writes to Supabase.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -42,27 +42,26 @@ describe("public pages read from the own API only", () => {
     }
   });
 
-  test("/reservatie: all reads via the API; Supabase only for the booking insert (7B)", () => {
+  test("/reservatie: reads AND the submit via the API; no Supabase at all (7B)", () => {
     const source = read("src/routes/reservatie.tsx");
-    for (const loader of [
+    for (const call of [
       "getPublicVehicleTypes",
       "getPublicVehicleTypeServices",
       "getPublicAvailability",
       "getPublicSiteSettings",
+      "createPublicBooking",
+      "toPublicBookingRequest",
     ]) {
-      assert.match(source, new RegExp(`\\b${loader}\\(`));
+      assert.match(source, new RegExp(`\\b${call}\\(`));
     }
-    const calls = supabaseCalls(source);
-    assert.deepEqual(
-      calls.map((c) => c.table).sort(),
-      ["booking_services", "bookings"],
-      "only the two write tables",
-    );
-    for (const call of calls) {
-      assert.match(call.chain, /^\s*\.insert\(|^\.insert\(/, `${call.table} must be an insert`);
-    }
+    assert.doesNotMatch(source, /integrations\/supabase|supabase\./);
+    assert.deepEqual(supabaseCalls(source), []);
+    // Exactly one booking request; no separate booking_services write.
+    assert.equal(source.match(/\bcreatePublicBooking\(/g)?.length, 1);
+    assert.doesNotMatch(source, /booking_services|\.insert\(/);
     // No local slot computation and no direct reads of blocked periods or settings.
     assert.doesNotMatch(source, /lib\/slots|computeAvailableSlots|fetchSlotData|computePickup/);
-    assert.doesNotMatch(source, /"blocked_periods"|"site_settings"|"vehicle_type_services"/);
+    // The submit is guarded against double submission.
+    assert.match(source, /submitGuard\.current\.start\(\)/);
   });
 });

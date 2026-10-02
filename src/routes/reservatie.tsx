@@ -17,9 +17,8 @@ import {
 import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { toast } from "sonner";
 import { SiteLayout } from "@/components/SiteLayout";
-// READS: own public API (vehicle types, services per type, availability, public settings).
-// WRITE (submit) still uses Supabase until phase 7B.
-import { supabase } from "@/integrations/supabase/client";
+// Reads AND the booking submit use the own public API (no Supabase, no token):
+// GET vehicle types / services / availability / site settings, POST /api/bookings.
 import { publicApi } from "@/lib/api/public-api";
 import {
   getPublicAvailability,
@@ -27,6 +26,13 @@ import {
   getPublicVehicleTypeServices,
   getPublicVehicleTypes,
 } from "@/lib/api/public-reads";
+import {
+  bookingConfirmation,
+  createPublicBooking,
+  createSubmitGuard,
+  describePublicBookingError,
+  toPublicBookingRequest,
+} from "@/lib/api/public-writes";
 import type {
   PublicVehicleType,
   VehicleTypeServiceOption,
@@ -104,22 +110,23 @@ const STEPS = [
   { id: 6, label: "Bevestigen" },
 ];
 
-// --- Helpers ---
-function timeToMinutes(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-function minutesToTime(m: number) {
-  const h = Math.floor(m / 60).toString().padStart(2, "0");
-  const mm = (m % 60).toString().padStart(2, "0");
-  return `${h}:${mm}`;
-}
-
 function BookingPage() {
   // Wizard state
   const [step, setStep] = useState(1);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // The server's booking (reference, times, totals) for the confirmation.
+  const [confirmation, setConfirmation] = useState<ReturnType<typeof bookingConfirmation> | null>(
+    null,
+  );
+  // One request at a time; results of an outdated submission are ignored.
+  const submitGuard = useRef(createSubmitGuard());
+  useEffect(() => {
+    const guard = submitGuard.current;
+    return () => guard.invalidate();
+  }, []);
+  // Bumped to reload the free slots (e.g. after 409 "slot no longer available").
+  const [availabilityNonce, setAvailabilityNonce] = useState(0);
   const progressRef = useRef<HTMLDivElement>(null);
   const isFirstStep = useRef(true);
 
@@ -243,7 +250,7 @@ function BookingPage() {
         if (!controller.signal.aborted) setAvailability({ status: "error" });
       });
     return () => controller.abort();
-  }, [date, vehicleTypeId, selectedServiceIdsKey]);
+  }, [date, vehicleTypeId, selectedServiceIdsKey, availabilityNonce]);
 
   const availableSlots = availability.status === "ready" ? availability.slots : [];
   const slotDuration =
@@ -282,68 +289,54 @@ function BookingPage() {
     setTime("");
   };
 
+  // POST /api/bookings: one request with the choices and customer data only. The server
+  // re-checks everything (vehicle type, services, opening hours, blocked periods, overlap),
+  // computes price, duration, location fee and pickup moment, and stores the booking with
+  // its service lines in one transaction.
   const submit = async () => {
-    const data = customerForm.getValues();
+    const id = submitGuard.current.start();
+    if (id === null) return; // already sending (double click / Enter)
     setSubmitting(true);
     try {
-      const endTime = minutesToTime(timeToMinutes(time) + totalDuration);
-      const serviceTitles = selectedServices.map((s) => s.title).join(", ");
-
-      const { data: booking, error } = await supabase
-        .from("bookings")
-        .insert({
-          customer_name: data.customer_name,
-          customer_email: data.customer_email,
-          customer_phone: data.customer_phone,
-          vehicle_type_id: vehicleTypeId,
-          vehicle_brand: data.vehicle_brand,
-          vehicle_model: data.vehicle_model,
-          vehicle_info: `${data.vehicle_brand} ${data.vehicle_model}`,
-          service_id: selectedServices[0]?.service_id ?? null,
-          service_title: serviceTitles,
-          preferred_date: date,
-          preferred_time: time,
-          end_time: endTime,
-          total_duration_minutes: totalDuration,
-          total_price: totalPrice,
-          on_location: data.on_location,
-          location_in_sint_niklaas: data.on_location ? !!data.location_in_sint_niklaas : null,
-          location_address: data.on_location && !data.location_in_sint_niklaas ? data.location_address : null,
-          location_fee: locationFee,
-          company_name: data.company_name || null,
-          vat_number: data.vat_number || null,
-          notes: data.notes || null,
-          status: "nieuw",
-        })
-        .select("id")
-        .single();
-
-      if (error || !booking) throw error ?? new Error("Geen reservatie aangemaakt");
-
-      // Insert booking_services
-      const bsRows = selectedServices.map((s) => ({
-        booking_id: booking.id,
-        service_id: s.service_id,
-        service_title: s.title,
-        price: s.price,
-        duration_minutes: s.duration_minutes,
-      }));
-      if (bsRows.length > 0) {
-        const { error: bsErr } = await supabase.from("booking_services").insert(bsRows);
-        if (bsErr) throw bsErr;
-      }
-
+      const request = toPublicBookingRequest(
+        {
+          vehicleTypeId,
+          serviceIds: selectedServices.map((s) => s.service_id),
+          date,
+          time,
+        },
+        customerForm.getValues(),
+      );
+      const booking = await createPublicBooking(publicApi, request);
+      if (!submitGuard.current.isCurrent(id)) return;
+      setConfirmation(bookingConfirmation(booking));
       toast.success("Reservatie ontvangen!");
       setSuccess(true);
     } catch (err) {
-      console.error(err);
-      toast.error("Er ging iets mis. Probeer opnieuw of bel ons.");
+      if (!submitGuard.current.isCurrent(id)) return;
+      const view = describePublicBookingError(err);
+      if (view.kind === "aborted") return;
+      toast.error(view.message);
+      for (const [field, message] of Object.entries(view.fields ?? {})) {
+        if (field in customerForm.getValues()) {
+          customerForm.setError(field as keyof CustomerForm, { message });
+        }
+      }
+      if (view.refreshAvailability) {
+        setTime("");
+        setAvailabilityNonce((n) => n + 1);
+      }
+      if (view.step) setStep(view.step);
     } finally {
-      setSubmitting(false);
+      submitGuard.current.finish(id);
+      if (submitGuard.current.isCurrent(id)) setSubmitting(false);
     }
   };
 
   const resetAll = () => {
+    submitGuard.current.invalidate();
+    setSubmitting(false);
+    setConfirmation(null);
     setSuccess(false);
     setStep(1);
     setVehicleTypeId("");
@@ -387,6 +380,20 @@ function BookingPage() {
                 We hebben uw aanvraag ontvangen. U krijgt een bevestiging per e-mail. Wij nemen
                 contact op indien nodig.
               </p>
+              {confirmation && (
+                <dl className="mt-6 mx-auto max-w-sm rounded-2xl bg-accent/40 p-5 space-y-2 text-sm text-left">
+                  <Row label="Referentie" value={confirmation.reference} />
+                  <Row
+                    label="Wagen afgeven"
+                    value={`${formatDateNL(confirmation.dropOff.date)} om ${confirmation.dropOff.time}`}
+                  />
+                  <Row
+                    label="Wagen ophalen"
+                    value={`${formatDateNL(confirmation.pickup.date)} om ${confirmation.pickup.time}`}
+                  />
+                  <Row label="Totaal incl. btw" value={confirmation.totalInclVat} />
+                </dl>
+              )}
               <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
                 <Button onClick={resetAll} className="bg-gradient-primary">Nieuwe reservatie</Button>
                 <Link to="/"><Button variant="outline">Terug naar home</Button></Link>

@@ -17,7 +17,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 6D-1: admin-frontend READ-migratie            | **Afgerond** (zie _Phase 6D-1_); admin-writes nog via Supabase                 |
 | Fase 6D-2: admin-frontend WRITE-migratie           | **Afgerond** (zie _Phase 6D-2_); admin volledig via de eigen API               |
 | Fase 7A: publieke frontend READ-migratie           | **Afgerond** (zie _Phase 7A_); booking-submit nog via Supabase                 |
-| Volgende fase                                      | **Public reservation write migration** (7B)                                    |
+| Fase 7B: publieke booking-WRITE-migratie           | **Afgerond** (zie _Phase 7B_); geen runtime-Supabase meer                      |
+| Volgende fase                                      | **Supabase/Lovable/Cloudflare dependency cleanup** (7C)                        |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
@@ -303,6 +304,37 @@ Details: `docs/PUBLIC-MIGRATION-MAP.md`.
   - De handmatige browsercheck is **niet** uitgevoerd: er was geen draaiende API met data beschikbaar.
 
 **Next phase: "Public reservation write migration"**
+
+## Phase 7B — Public reservation write migration
+
+**Status: COMPLETE**
+
+Details: `docs/PUBLIC-BOOKING-MIGRATION.md` en `docs/PUBLIC-MIGRATION-MAP.md`.
+
+- **Booking submit moved to API**: `/reservatie` doet nu één `POST /api/bookings`.
+  - Het is het bestaande endpoint uit Fase 4; er is geen nieuw endpoint en geen nieuwe engine gebouwd.
+  - Het request gaat via de bestaande client: de nieuwe publieke `post()`, zonder token en zonder Auth0.
+  - De typed laag is `src/lib/api/public-writes.ts`, met een expliciete mapper van formulier naar request en validatie met het gedeelde `bookingRequestSchema`.
+- **Supabase booking writes removed**: de twee losse inserts (`bookings` en `booking_services`) zijn weg, zonder fallback. De server bewaart de boeking en de dienstsnapshots in één transactie.
+- **Server-authoritative pricing**:
+  - Prijs, btw, totalen, locatievergoeding, duur, status en cancel token komen uitsluitend van de server.
+  - De bevestiging toont de serverwaarden (referentie, afgeven, ophalen en totaal incl. btw).
+  - De totalen in de wizard blijven een indicatie en worden nooit verstuurd.
+- **Server-authoritative scheduling**:
+  - `GET /api/availability` is alleen een preflight; `POST /api/bookings` controleert opnieuw (openingsuren, grid, verleden, blokkades, overlap; de exclusion constraint is de laatste waarborg).
+  - 409 → melding, terug naar stap 4 en de slots worden herladen.
+  - 422 → planningsmelding.
+  - 400, 500/503, netwerk en timeout → vaste Nederlandse teksten.
+  - Bescherming tegen dubbele submit.
+- **Customer email requirement**: het e-mailadres is verplicht en wordt gevalideerd (in het formulier en in het contract vóór verzending, plus op de server). Er is geen placeholder.
+- **Tests**:
+  - Root: **177 tests, allemaal geslaagd** (was 156). Nieuw: 20 voor de publieke booking-write (payload-securitytest, mapping, e-mail, fouten, dubbele submit, bevestiging uit de serverresponse) en 1 clienttest (publieke `post()` zonder token). De paginatest is aangescherpt: `/reservatie` heeft geen Supabase meer en één booking-call.
+  - `apps/api`: **232 tests**, waarvan 231 geslaagd en 1 overgeslagen. Nieuw: 3 consistentietests (de publieke boeking is identiek zichtbaar via de admin-API; availability is een preflight en POST blijft authoritative).
+  - Handmatige browsertest: **niet** uitgevoerd (geen draaiende API met database beschikbaar).
+- **Historical Supabase data**: **NOT MIGRATED**. Oude Supabase-bookings blijven in Supabase; nieuwe boekingen komen in de self-hosted PostgreSQL. Data-migratie volgt later.
+- **Supabase runtime**: geen enkele runtime-read of -write meer (publiek en admin), geen Storage en geen Supabase Auth. Alleen legacy of ongebruikte bestanden blijven over voor 7C: `src/lib/slots.ts` (geen importer meer), `src/integrations/supabase/`, `supabase/` en `@supabase/supabase-js`.
+
+**Next phase: "Supabase/Lovable/Cloudflare dependency cleanup"**
 
 ## Current architecture
 
