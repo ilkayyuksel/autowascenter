@@ -22,27 +22,28 @@ HTTP API of the self-hosted backend (`apps/api`).
 
 ## Endpoints
 
-| Method | Path                                         | Purpose                                              |
-| ------ | -------------------------------------------- | ---------------------------------------------------- |
-| GET    | `/health`                                    | Liveness                                             |
-| GET    | `/health/db`                                 | Readiness (database)                                 |
-| GET    | `/api/services`                              | Active services (catalogue)                          |
-| GET    | `/api/gallery`                               | Gallery items                                        |
-| GET    | `/api/reviews`                               | Approved reviews                                     |
-| GET    | `/api/vehicle-types`                         | Active vehicle types                                 |
-| GET    | `/api/vehicle-types/:vehicleTypeId/services` | Bookable options with price/duration for a type      |
-| GET    | `/api/availability`                          | Free start times for a date and selection            |
-| POST   | `/api/bookings`                              | Create a booking                                     |
-| GET    | `/api/admin/me`                              | **Protected** (`admin:access`): who am I             |
-| GET    | `/api/admin/dashboard`                       | **Protected**: counts, week revenue, today, next     |
-| GET    | `/api/admin/bookings?page=&limit=`           | **Protected**: paginated bookings                    |
-| GET    | `/api/admin/bookings/:id`                    | **Protected**: booking detail + service lines        |
-| GET    | `/api/admin/agenda?start=&end=`              | **Protected**: bookings + blocked periods in a range |
-| GET    | `/api/admin/services`                        | **Protected**: full catalogue + package contents     |
-| GET    | `/api/admin/vehicle-types`                   | **Protected**: vehicle types + pricing matrix        |
-| GET    | `/api/admin/blocked-periods`                 | **Protected**: all blocked periods                   |
-| GET    | `/api/admin/settings`                        | **Protected**: site settings (single object)         |
-| GET    | `/api/admin/gallery`                         | **Protected**: all gallery items                     |
+| Method | Path                                         | Purpose                                               |
+| ------ | -------------------------------------------- | ----------------------------------------------------- |
+| GET    | `/health`                                    | Liveness                                              |
+| GET    | `/health/db`                                 | Readiness (database)                                  |
+| GET    | `/api/services`                              | Active services (catalogue)                           |
+| GET    | `/api/gallery`                               | Gallery items                                         |
+| GET    | `/api/reviews`                               | Approved reviews                                      |
+| GET    | `/api/vehicle-types`                         | Active vehicle types                                  |
+| GET    | `/api/vehicle-types/:vehicleTypeId/services` | Bookable options with price/duration for a type       |
+| GET    | `/api/site-settings`                         | Public settings subset: `km_fee`, `free_km` only (7A) |
+| GET    | `/api/availability`                          | Free start times for a date and selection             |
+| POST   | `/api/bookings`                              | Create a booking                                      |
+| GET    | `/api/admin/me`                              | **Protected** (`admin:access`): who am I              |
+| GET    | `/api/admin/dashboard`                       | **Protected**: counts, week revenue, today, next      |
+| GET    | `/api/admin/bookings?page=&limit=`           | **Protected**: paginated bookings                     |
+| GET    | `/api/admin/bookings/:id`                    | **Protected**: booking detail + service lines         |
+| GET    | `/api/admin/agenda?start=&end=`              | **Protected**: bookings + blocked periods in a range  |
+| GET    | `/api/admin/services`                        | **Protected**: full catalogue + package contents      |
+| GET    | `/api/admin/vehicle-types`                   | **Protected**: vehicle types + pricing matrix         |
+| GET    | `/api/admin/blocked-periods`                 | **Protected**: all blocked periods                    |
+| GET    | `/api/admin/settings`                        | **Protected**: site settings (single object)          |
+| GET    | `/api/admin/gallery`                         | **Protected**: all gallery items                      |
 
 **Admin writes (phase 6B)**, all **protected** (`admin:access`):
 

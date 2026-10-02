@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Star, Quote } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { publicApi } from "@/lib/api/public-api";
+import { getPublicReviews } from "@/lib/api/public-reads";
 
 type Review = {
   id: string;
@@ -12,14 +13,14 @@ type Review = {
 export function Testimonials() {
   const [reviews, setReviews] = useState<Review[]>([]);
 
+  // GET /api/reviews?limit=6: approved reviews only (enforced by the API), newest first.
+  // No reviews or an error → the section is not shown, as before.
   useEffect(() => {
-    supabase
-      .from("reviews")
-      .select("id,customer_name,rating,content")
-      .eq("approved", true)
-      .order("created_at", { ascending: false })
-      .limit(6)
-      .then(({ data }) => data && setReviews(data));
+    const controller = new AbortController();
+    getPublicReviews(publicApi, { limit: 6, signal: controller.signal })
+      .then(setReviews)
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   if (!reviews.length) return null;

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { Button } from "./ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { publicApi } from "@/lib/api/public-api";
+import { getPublicGallery, withFallback } from "@/lib/api/public-reads";
 import gallery1 from "@/assets/gallery-1.jpg";
 import gallery2 from "@/assets/gallery-2.jpg";
 import gallery3 from "@/assets/gallery-3.jpg";
@@ -20,15 +21,13 @@ type Item = { id: string; title: string | null; image_url: string };
 export function RealisationsPreview() {
   const [items, setItems] = useState<Item[]>(FALLBACK);
 
+  // GET /api/gallery?limit=4; the example photos stay when there are no items or on error.
   useEffect(() => {
-    supabase
-      .from("gallery_items")
-      .select("id,title,image_url")
-      .order("sort_order")
-      .limit(4)
-      .then(({ data }) => {
-        if (data && data.length > 0) setItems(data);
-      });
+    const controller = new AbortController();
+    getPublicGallery(publicApi, { limit: 4, signal: controller.signal })
+      .then((data) => setItems(withFallback<Item>(data, FALLBACK)))
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   return (

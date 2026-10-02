@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { SiteLayout } from "@/components/SiteLayout";
-import { supabase } from "@/integrations/supabase/client";
+import { publicApi } from "@/lib/api/public-api";
+import { getPublicGallery, withFallback } from "@/lib/api/public-reads";
 import gallery1 from "@/assets/gallery-1.jpg";
 import gallery2 from "@/assets/gallery-2.jpg";
 import gallery3 from "@/assets/gallery-3.jpg";
@@ -45,14 +46,15 @@ function GalleryPage() {
   const [filter, setFilter] = useState<string>("Alle");
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null);
 
+  // GET /api/gallery (by sort order). image_url / before_image_url are used as returned
+  // (old Supabase URLs and new self-hosted URLs alike). The example photos stay when there
+  // are no items or on error, as before.
   useEffect(() => {
-    supabase
-      .from("gallery_items")
-      .select("id,title,description,image_url,category,before_image_url")
-      .order("sort_order")
-      .then(({ data }) => {
-        if (data && data.length > 0) setItems(data as GalleryItem[]);
-      });
+    const controller = new AbortController();
+    getPublicGallery(publicApi, { signal: controller.signal })
+      .then((data) => setItems(withFallback<GalleryItem>(data, FALLBACK)))
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   const categories = useMemo(() => {

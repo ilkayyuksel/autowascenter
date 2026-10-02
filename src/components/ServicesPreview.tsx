@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Sparkles, SprayCan, Car, Shield } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { publicApi } from "@/lib/api/public-api";
+import { getPublicServices } from "@/lib/api/public-reads";
 import { Button } from "./ui/button";
 
 const ICONS: Record<string, typeof Sparkles> = {
@@ -25,14 +26,14 @@ type Service = {
 export function ServicesPreview() {
   const [services, setServices] = useState<Service[]>([]);
 
+  // GET /api/services?limit=4 (active, by sort order). On failure the section stays empty,
+  // as before.
   useEffect(() => {
-    supabase
-      .from("services")
-      .select("id,title,description,price,duration_minutes,icon,badge,bookable")
-      .eq("active", true)
-      .order("sort_order")
-      .limit(4)
-      .then(({ data }) => data && setServices(data as Service[]));
+    const controller = new AbortController();
+    getPublicServices(publicApi, { limit: 4, signal: controller.signal })
+      .then(setServices)
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   return (

@@ -9,6 +9,7 @@ import {
 } from "../../services/catalog.service.ts";
 import { listPublicGallery } from "../../services/gallery.service.ts";
 import { listPublicReviews } from "../../services/reviews.service.ts";
+import { getPublicSiteSettings } from "../../services/site-settings.service.ts";
 
 /**
  * Public, unauthenticated read endpoints, mounted under /api.
@@ -31,6 +32,9 @@ export async function publicRoutes(app: FastifyInstance) {
   });
 
   app.get("/vehicle-types", async () => ({ data: await listPublicVehicleTypes(app.db) }));
+
+  // Only the public booking page's on-location fee information (km_fee, free_km).
+  app.get("/site-settings", async () => ({ data: await getPublicSiteSettings(app.db) }));
 
   app.get("/vehicle-types/:vehicleTypeId/services", async (request) => {
     const { vehicleTypeId } = vehicleTypeParams.parse(request.params);

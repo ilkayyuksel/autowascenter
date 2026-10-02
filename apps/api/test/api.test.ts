@@ -11,6 +11,7 @@ import {
   publicGalleryItem,
   publicReview,
   publicService,
+  publicSiteSettingsResponse,
   publicVehicleType,
   vehicleTypeServiceOption,
 } from "../src/contracts/public.ts";
@@ -204,6 +205,38 @@ describe("GET /api/vehicle-types", () => {
       assertListShape(res.body, publicVehicleType).map((v) => v.slug),
       ["stadswagen", "suv"],
     );
+  });
+});
+
+describe("GET /api/site-settings (public subset)", () => {
+  test("no settings row → 500 SETTINGS_NOT_CONFIGURED", async () => {
+    const res = await get("/api/site-settings");
+    assert.equal(res.status, 500);
+    assertError(res.body, "SETTINGS_NOT_CONFIGURED");
+  });
+
+  test("returns only km_fee and free_km: never notification_email or other admin data", async () => {
+    await db.insert(schema.siteSettings).values({
+      kmFee: "0.75",
+      freeKm: "15",
+      notificationEmail: "admin@autowascenter.test",
+      baseAddress: "Geheimstraat 1",
+    });
+    const res = await get("/api/site-settings");
+    assert.equal(res.status, 200);
+    assert.deepEqual(publicSiteSettingsResponse.parse(res.body), {
+      data: { km_fee: 0.75, free_km: 15 },
+    });
+    const raw = JSON.stringify(res.body);
+    assert.doesNotMatch(
+      raw,
+      /notification_email|admin@autowascenter|Geheimstraat|opening_hour|base_/,
+    );
+  });
+
+  test("is public: no Authorization header needed", async () => {
+    await db.insert(schema.siteSettings).values({});
+    assert.equal((await get("/api/site-settings")).status, 200);
   });
 });
 

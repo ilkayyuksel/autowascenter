@@ -17,13 +17,26 @@ import {
 import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { toast } from "sonner";
 import { SiteLayout } from "@/components/SiteLayout";
+// READS: own public API (vehicle types, services per type, availability, public settings).
+// WRITE (submit) still uses Supabase until phase 7B.
 import { supabase } from "@/integrations/supabase/client";
+import { publicApi } from "@/lib/api/public-api";
+import {
+  getPublicAvailability,
+  getPublicSiteSettings,
+  getPublicVehicleTypeServices,
+  getPublicVehicleTypes,
+} from "@/lib/api/public-reads";
+import type {
+  PublicVehicleType,
+  VehicleTypeServiceOption,
+} from "../../packages/shared/src/public.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { computeAvailableSlots, computePickup, formatDuration, fetchSlotData } from "@/lib/slots";
+import { formatDuration } from "@/lib/time-display";
 
 export const Route = createFileRoute("/reservatie")({
   head: () => ({
@@ -37,48 +50,23 @@ export const Route = createFileRoute("/reservatie")({
   component: BookingPage,
 });
 
-// --- Types ---
-type VehicleType = {
-  id: string;
-  slug: string;
-  title: string;
-  description: string | null;
-  image_url: string | null;
-};
+// --- Types (API contracts, packages/shared/src/public.ts) ---
+type VehicleType = PublicVehicleType;
+/** id = vehicle_type_services.id (selection key); service_id = the service. */
+type ServiceOption = VehicleTypeServiceOption;
 
-type ServiceOption = {
-  id: string; // vts.id
-  service_id: string;
-  title: string;
-  description: string | null;
-  category: string | null;
-  badge: string | null;
-  price: number;
-  duration_minutes: number;
-  kind: string;
-  includes: string[];
-};
-
-type Booking = {
-  preferred_date: string;
-  preferred_time: string;
-  total_duration_minutes: number;
-};
-
-type BlockedPeriod = {
-  start_date: string;
-  end_date: string;
-  start_time: string | null;
-  end_time: string | null;
-};
-
+/** Public subset of the settings (GET /api/site-settings); defaults as before. */
 type SiteSettings = {
   km_fee: number;
   free_km?: number;
-  opening_hour: string;
-  closing_hour: string;
-  slot_interval_minutes: number;
 };
+
+type Slot = { time: string; pickup_date: string; pickup_time: string };
+type AvailabilityState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; slots: Slot[]; totalDurationMinutes: number };
 
 function formatDateNL(iso: string) {
   if (!iso) return "";
@@ -145,15 +133,11 @@ function BookingPage() {
 
   // Data from DB
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [vehicleTypesFailed, setVehicleTypesFailed] = useState(false);
   const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [blocked, setBlocked] = useState<BlockedPeriod[]>([]);
-  const [settings, setSettings] = useState<SiteSettings>({
-    km_fee: 1,
-    opening_hour: "10:00",
-    closing_hour: "21:00",
-    slot_interval_minutes: 30,
-  });
+  const [servicesFailed, setServicesFailed] = useState(false);
+  const [availability, setAvailability] = useState<AvailabilityState>({ status: "idle" });
+  const [settings, setSettings] = useState<SiteSettings>({ km_fee: 1 });
 
   // Selections
   const [vehicleTypeId, setVehicleTypeId] = useState<string>("");
@@ -181,89 +165,41 @@ function BookingPage() {
   const onLocation = customerForm.watch("on_location");
   const inSN = customerForm.watch("location_in_sint_niklaas");
 
-  // Initial loads
+  // Initial loads: GET /api/vehicle-types (active) and GET /api/site-settings (km fee text).
   useEffect(() => {
-    supabase
-      .from("vehicle_types")
-      .select("id,slug,title,description,image_url")
-      .eq("active", true)
-      .order("sort_order")
-      .then(({ data }) => data && setVehicleTypes(data as VehicleType[]));
-
-    supabase
-      .from("blocked_periods")
-      .select("start_date,end_date,start_time,end_time")
-      .then(({ data }) => data && setBlocked(data as BlockedPeriod[]));
-
-    supabase
-      .from("site_settings")
-      .select("km_fee,free_km,opening_hour,closing_hour,slot_interval_minutes")
-      .limit(1)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setSettings({
-            km_fee: Number(data.km_fee),
-            free_km: Number(data.free_km),
-            opening_hour: data.opening_hour,
-            closing_hour: data.closing_hour,
-            slot_interval_minutes: data.slot_interval_minutes,
-          });
-        }
+    const controller = new AbortController();
+    const { signal } = controller;
+    getPublicVehicleTypes(publicApi, { signal })
+      .then(setVehicleTypes)
+      .catch(() => {
+        if (!signal.aborted) setVehicleTypesFailed(true);
       });
+    // On failure the previous defaults stay (as before).
+    getPublicSiteSettings(publicApi, { signal })
+      .then((s) => setSettings({ km_fee: s.km_fee, free_km: s.free_km }))
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
-  // Load services for chosen vehicle type
+  // Services for the chosen vehicle type: GET /api/vehicle-types/:id/services (bookable,
+  // active, available; this type's price/duration; package contents in `includes`).
   useEffect(() => {
-    if (!vehicleTypeId) {
-      setServiceOptions([]);
-      return;
-    }
-    supabase
-      .from("vehicle_type_services")
-      .select(
-        "id,service_id,price,duration_minutes,available,services!inner(id,title,description,category,badge,bookable,active,sort_order,kind)",
-      )
-      .eq("vehicle_type_id", vehicleTypeId)
-      .eq("available", true)
-      .then(async ({ data }) => {
-        if (!data) return;
-        const { data: ps } = await supabase.from("package_services").select("package_id,services!package_services_service_id_fkey(title)");
-        const inc: Record<string, string[]> = {};
-        ((ps as any[]) ?? []).forEach((r) => { if (r.services?.title) (inc[r.package_id] ??= []).push(r.services.title); });
-        const opts: ServiceOption[] = (data as any[])
-          .filter((row) => row.services?.bookable && row.services?.active)
-          .map((row) => ({
-            id: row.id,
-            service_id: row.service_id,
-            title: row.services.title,
-            description: row.services.description,
-            category: row.services.category,
-            badge: row.services.badge,
-            price: Number(row.price),
-            duration_minutes: Number(row.duration_minutes),
-            kind: row.services.kind ?? "dienst",
-            includes: inc[row.service_id] ?? [],
-          }))
-          .sort((a, b) => a.title.localeCompare(b.title));
-        setServiceOptions(opts);
-      });
+    setServiceOptions([]);
+    setServicesFailed(false);
     // Reset downstream when vehicle type changes
     setSelectedServiceVtsIds([]);
     setTime("");
+    if (!vehicleTypeId) return;
+    const controller = new AbortController();
+    getPublicVehicleTypeServices(publicApi, vehicleTypeId, { signal: controller.signal })
+      .then(setServiceOptions)
+      .catch(() => {
+        if (!controller.signal.aborted) setServicesFailed(true);
+      });
+    return () => controller.abort();
   }, [vehicleTypeId]);
 
-  // Load bookings around the chosen date so multi-day services are accounted for
   useEffect(() => {
-    if (!date) {
-      setBookings([]);
-      return;
-    }
-    fetchSlotData(date).then(({ bookings: bs, blocked: bl, settings: st }) => {
-      setBookings(bs);
-      setBlocked(bl);
-      setSettings((s) => ({ ...s, ...st }));
-    });
     setTime("");
   }, [date]);
 
@@ -281,18 +217,42 @@ function BookingPage() {
   const freeKm = settings.free_km ?? 20;
   const selectedVehicleType = vehicleTypes.find((v) => v.id === vehicleTypeId);
 
-  // Available time slots — uses shared computation (single source of truth)
-  const availableSlots = useMemo(
-    () =>
-      computeAvailableSlots({
-        date,
-        durationMinutes: totalDuration,
-        bookings,
-        blocked,
-        settings,
-      }),
-    [date, totalDuration, bookings, blocked, settings],
-  );
+  // Free start times: GET /api/availability (server-side: opening hours, slot grid, blocked
+  // periods, existing bookings, multi-day work). The browser no longer computes slots.
+  const selectedServiceIdsKey = selectedServices.map((s) => s.service_id).join(",");
+  useEffect(() => {
+    if (!date || !vehicleTypeId || !selectedServiceIdsKey) {
+      setAvailability({ status: "idle" });
+      return;
+    }
+    const controller = new AbortController();
+    setAvailability({ status: "loading" });
+    getPublicAvailability(
+      publicApi,
+      { date, vehicle_type_id: vehicleTypeId, service_ids: selectedServiceIdsKey.split(",") },
+      { signal: controller.signal },
+    )
+      .then((data) =>
+        setAvailability({
+          status: "ready",
+          slots: data.slots,
+          totalDurationMinutes: data.total_duration_minutes,
+        }),
+      )
+      .catch(() => {
+        if (!controller.signal.aborted) setAvailability({ status: "error" });
+      });
+    return () => controller.abort();
+  }, [date, vehicleTypeId, selectedServiceIdsKey]);
+
+  const availableSlots = availability.status === "ready" ? availability.slots : [];
+  const slotDuration =
+    availability.status === "ready" ? availability.totalDurationMinutes : totalDuration;
+  /** Pickup moment of a start time, as computed by the server. */
+  const pickupOf = (t: string) => {
+    const slot = availableSlots.find((x) => x.time === t);
+    return slot ? { date: slot.pickup_date, time: slot.pickup_time } : null;
+  };
 
   // Step navigation guards
   const canNext = () => {
@@ -481,6 +441,11 @@ function BookingPage() {
                     <p className="text-sm text-muted-foreground">
                       Selecteer het type dat het best bij uw wagen past.
                     </p>
+                    {vehicleTypesFailed && (
+                      <p role="alert" className="text-sm text-muted-foreground italic">
+                        De voertuigtypes konden niet geladen worden. Probeer het later opnieuw.
+                      </p>
+                    )}
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {vehicleTypes.map((v) => {
                         const VIcon = getVehicleIcon(v.slug);
@@ -525,7 +490,11 @@ function BookingPage() {
                         Meerdere keuzes mogelijk. Prijs en duur zijn aangepast aan uw voertuigtype. Alle prijzen excl. btw.
                       </p>
                     </div>
-                    {serviceOptions.filter((s) => s.kind !== "extra").length === 0 && (
+                    {servicesFailed ? (
+                      <p role="alert" className="text-sm text-muted-foreground italic">
+                        De diensten konden niet geladen worden. Probeer het later opnieuw.
+                      </p>
+                    ) : serviceOptions.filter((s) => s.kind !== "extra").length === 0 && (
                       <p className="text-sm text-muted-foreground italic">Geen diensten beschikbaar voor dit voertuigtype.</p>
                     )}
                     {(["pakket", "dienst"] as const).map((k) => {
@@ -583,15 +552,21 @@ function BookingPage() {
                     </div>
                     {date && (
                       <div>
-                        <Label>Wagen afgeven om — kies een vrij tijdstip ({formatDuration(totalDuration)} nodig)</Label>
-                        {availableSlots.length === 0 ? (
+                        <Label>Wagen afgeven om — kies een vrij tijdstip ({formatDuration(slotDuration)} nodig)</Label>
+                        {availability.status === "loading" ? (
+                          <p className="mt-2 text-sm text-muted-foreground italic">Beschikbare tijdstippen laden…</p>
+                        ) : availability.status === "error" ? (
+                          <p role="alert" className="mt-2 text-sm text-muted-foreground italic">
+                            De beschikbaarheid kon niet geladen worden. Probeer het later opnieuw.
+                          </p>
+                        ) : availableSlots.length === 0 ? (
                           <p className="mt-2 text-sm text-muted-foreground italic">
                             Geen beschikbare tijdstippen op deze datum. Kies een andere datum.
                           </p>
                         ) : (
                           <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {availableSlots.map((t) => {
-                              const pickup = computePickup(date, t, totalDuration, settings);
+                            {availableSlots.map(({ time: t, pickup_date, pickup_time }) => {
+                              const pickup = { date: pickup_date, time: pickup_time };
                               const sameDay = pickup.date === date;
                               return (
                                 <button
@@ -618,7 +593,8 @@ function BookingPage() {
                             U levert uw wagen af om <span className="font-semibold text-foreground">{time}</span> en kan ze ophalen om{" "}
                             <span className="font-semibold text-foreground">
                               {(() => {
-                                const p = computePickup(date, time, totalDuration, settings);
+                                const p = pickupOf(time);
+                                if (!p) return "—";
                                 return p.date === date ? p.time : `${formatDateNL(p.date)} ${p.time}`;
                               })()}
                             </span>.
@@ -780,11 +756,12 @@ function BookingPage() {
                         label="Wagen ophalen"
                         value={(() => {
                           if (!time || !date) return "-";
-                          const p = computePickup(date, time, totalDuration, settings);
+                          const p = pickupOf(time);
+                          if (!p) return "-";
                           return p.date === date ? p.time : `${formatDateNL(p.date)} om ${p.time}`;
                         })()}
                       />
-                      <Row label="Totale duur" value={formatDuration(totalDuration)} />
+                      <Row label="Totale duur" value={formatDuration(slotDuration)} />
                       {customerForm.getValues("notes") && <Row label="Opmerking" value={customerForm.getValues("notes") ?? ""} />}
                       <Row label="Wagen" value={`${customerForm.getValues("vehicle_brand")} ${customerForm.getValues("vehicle_model")}`} />
                       <Row label="Naam" value={customerForm.getValues("customer_name")} />

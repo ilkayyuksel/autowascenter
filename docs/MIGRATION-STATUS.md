@@ -16,7 +16,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 6C: gallery storage (self-hosted)             | **Afgerond** (zie _Phase 6C_); frontend en bestaande bestanden niet gemigreerd |
 | Fase 6D-1: admin-frontend READ-migratie            | **Afgerond** (zie _Phase 6D-1_); admin-writes nog via Supabase                 |
 | Fase 6D-2: admin-frontend WRITE-migratie           | **Afgerond** (zie _Phase 6D-2_); admin volledig via de eigen API               |
-| Volgende fase                                      | **Remove Supabase from the admin/application path**                            |
+| Fase 7A: publieke frontend READ-migratie           | **Afgerond** (zie _Phase 7A_); booking-submit nog via Supabase                 |
+| Volgende fase                                      | **Public reservation write migration** (7B)                                    |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
@@ -268,6 +269,40 @@ Details: `docs/ADMIN-FRONTEND-MIGRATION.md`.
 - **Lint**: 0 nieuwe problemen. Totaal 949 (baseline 1.003 na 6D-1; oorspronkelijk 1.009). Geen enkel gewijzigd bestand heeft meer meldingen dan op HEAD.
 
 **Next phase: "Remove Supabase from the admin/application path"**
+
+## Phase 7A — Public frontend READ migration
+
+**Status: COMPLETE**
+
+Details: `docs/PUBLIC-MIGRATION-MAP.md`.
+
+- **Public endpoints used**:
+  - `GET /api/services` (home `limit=4` en `/diensten`);
+  - `GET /api/gallery` (home `limit=4` en `/galerij`);
+  - `GET /api/reviews?limit=6`;
+  - `GET /api/vehicle-types`;
+  - `GET /api/vehicle-types/:id/services`;
+  - `GET /api/availability`;
+  - **nieuw**: `GET /api/site-settings`, met alleen `km_fee` en `free_km` en een strikt, apart publiek contract. Nooit `notification_email` of andere admin-data.
+  - Alles via de bestaande client (`publicApi`, zonder token en zonder Auth0) en de typed laag `src/lib/api/public-reads.ts`. De publieke contracten zijn verhuisd naar `packages/shared/src/public.ts`.
+- **Supabase reads removed**:
+  - `ServicesPreview`, `RealisationsPreview` en `Testimonials`;
+  - `/diensten` en `/galerij`;
+  - alle reads van `/reservatie`: `vehicle_types`, `vehicle_type_services`, `services`, `package_services`, `blocked_periods`, `site_settings`, en de boekingen via `fetchSlotData`.
+- **Reservation reads migrated**:
+  - Voertuigtypes, diensten per type (met pakketinhoud) en vrije slots plus ophaalmoment komen van de server. `src/lib/slots.ts` wordt niet meer gebruikt; het blijft bestaan en wordt in 7B/7C verwijderd.
+  - Blokkades worden niet meer naar de browser geladen: de availability-API gebruikt ze intern.
+  - De prijstotalen in de wizard blijven een indicatie. De authoritative prijs komt in 7B uit `POST /api/bookings`.
+- **Remaining public writes**: alleen de submit van `/reservatie` (insert in `bookings` en `booking_services`), tot Fase 7B.
+  - Tussentoestand: die boekingen komen in Supabase terecht, terwijl de beschikbaarheid uit de eigen database komt. **Niet deployen.**
+  - Contact: er is geen submit-backend (alleen een toast). Dat is ongewijzigd, niet gemigreerd en niet geïmplementeerd.
+- **Unchanged**: `/over-ons` en `/contact` (geen data). Ook UI, teksten, filters, fallbacks en lightbox zijn ongewijzigd. Alleen bij fouten tonen `/diensten` en `/reservatie` nu een korte melding.
+- **Tests**:
+  - Root: **156 tests, allemaal geslaagd** (was 111). Nieuw: 37 publieke read-tests (per endpoint: succes, leeg, 400/404/500/503, malformed, timeout, geen Authorization-header; plus URL-behandeling en fallback) en 8 paginatests (geen Supabase-import of -query in home, diensten en galerij; in `/reservatie` alleen de twee inserts).
+  - `apps/api`: **229 tests**, waarvan 228 geslaagd en 1 overgeslagen (+3 voor `GET /api/site-settings`).
+  - De handmatige browsercheck is **niet** uitgevoerd: er was geen draaiende API met data beschikbaar.
+
+**Next phase: "Public reservation write migration"**
 
 ## Current architecture
 

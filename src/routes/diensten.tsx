@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Sparkles, SprayCan, Car, Shield, Check, Info } from "lucide-react";
 import { SiteLayout } from "@/components/SiteLayout";
-import { supabase } from "@/integrations/supabase/client";
+import { publicApi } from "@/lib/api/public-api";
+import { getPublicServices } from "@/lib/api/public-reads";
 import { Button } from "@/components/ui/button";
 import gallery1 from "@/assets/gallery-1.jpg";
 import gallery2 from "@/assets/gallery-2.jpg";
@@ -44,14 +45,17 @@ export const Route = createFileRoute("/diensten")({
 function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [filter, setFilter] = useState<string>("Alle");
+  const [loadFailed, setLoadFailed] = useState(false);
 
+  // GET /api/services (active, by sort order).
   useEffect(() => {
-    supabase
-      .from("services")
-      .select("id,title,description,icon,category,badge,bookable,image_url")
-      .eq("active", true)
-      .order("sort_order")
-      .then(({ data }) => data && setServices(data as Service[]));
+    const controller = new AbortController();
+    getPublicServices(publicApi, { signal: controller.signal })
+      .then(setServices)
+      .catch(() => {
+        if (!controller.signal.aborted) setLoadFailed(true);
+      });
+    return () => controller.abort();
   }, []);
 
   const categories = useMemo(() => {
@@ -102,6 +106,12 @@ function ServicesPage() {
                 </button>
               ))}
             </div>
+          )}
+
+          {loadFailed && services.length === 0 && (
+            <p role="alert" className="text-sm text-muted-foreground italic">
+              De diensten konden niet geladen worden. Probeer het later opnieuw.
+            </p>
           )}
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
