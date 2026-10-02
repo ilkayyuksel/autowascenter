@@ -130,7 +130,7 @@ export const bookingServices = pgTable(
 /**
  * Unavailable periods. Source: M3; times changed from `text` to `time`.
  * A NULL start_time means "from 00:00", a NULL end_time means "until 24:00",
- * applied to every day in [start_date, end_date] (same semantics as src/lib/slots.ts).
+ * applied to every day in [start_date, end_date] (same semantics as the former src/lib/slots.ts).
  */
 export const blockedPeriods = pgTable(
   "blocked_periods",

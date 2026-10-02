@@ -1,9 +1,10 @@
 // Calendar and clock helpers in the business time zone (Europe/Brussels).
 //
 // Dates are `YYYY-MM-DD` strings and times are minutes since local midnight, exactly like
-// src/lib/slots.ts, so the slot algorithm can be ported one-to-one. Conversion to absolute
-// instants uses the IANA rules built into Node (Intl), so CET/CEST offsets are correct on
-// every date. `new Date().toISOString()` is never used to decide the local calendar day.
+// the former src/lib/slots.ts (removed in phase 7C), so the slot algorithm could be ported
+// one-to-one. Conversion to absolute instants uses the IANA rules built into Node (Intl),
+// so CET/CEST offsets are correct on every date. `new Date().toISOString()` is never used
+// to decide the local calendar day.
 
 import { BUSINESS_TIME_ZONE } from "@autowascenter/shared";
 

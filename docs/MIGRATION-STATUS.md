@@ -18,7 +18,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 6D-2: admin-frontend WRITE-migratie           | **Afgerond** (zie _Phase 6D-2_); admin volledig via de eigen API               |
 | Fase 7A: publieke frontend READ-migratie           | **Afgerond** (zie _Phase 7A_); booking-submit nog via Supabase                 |
 | Fase 7B: publieke booking-WRITE-migratie           | **Afgerond** (zie _Phase 7B_); geen runtime-Supabase meer                      |
-| Volgende fase                                      | **Supabase/Lovable/Cloudflare dependency cleanup** (7C)                        |
+| Fase 7C: Supabase/Lovable/Cloudflare-cleanup       | **Afgerond** (zie _Phase 7C_); self-hosted Node-build                          |
+| Volgende fase                                      | **Production Docker Compose infrastructure** (8)                               |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
@@ -336,7 +337,49 @@ Details: `docs/PUBLIC-BOOKING-MIGRATION.md` en `docs/PUBLIC-MIGRATION-MAP.md`.
 
 **Next phase: "Supabase/Lovable/Cloudflare dependency cleanup"**
 
+## Phase 7C — Self-hosted dependency cleanup
+
+**Status: COMPLETE**
+
+Details: `docs/SELF-HOSTED-ARCHITECTURE.md` en `docs/DEPRECATION-CLEANUP-MAP.md`.
+
+- **Supabase runtime removed**:
+  - `src/integrations/supabase/` (5 bestanden) en het ongebruikte `src/lib/slots.ts` zijn verwijderd, nadat bevestigd was dat er geen importers meer waren.
+  - `@supabase/supabase-js` is uit `package.json` en de lockfile gehaald.
+  - `VITE_SUPABASE_*` en `SUPABASE_*` zijn uit `.env.example` verwijderd.
+  - Runtime- en build-referenties: 0.
+- **Lovable removed**:
+  - `@lovable.dev/vite-tanstack-config` is vervangen door een expliciete `vite.config.ts` met Tailwind, tsconfig-paths, TanStack Start (met `importProtection`), Nitro en React.
+  - Dezelfde lightningcss/dedupe/dev-server-instellingen blijven; de sandbox-, editor- en diagnostiekplugins zijn weg.
+  - `bun.lockb` en `bunfig.toml` zijn verwijderd.
+- **Cloudflare Worker target removed**: `cloudflare-module`, `wrangler.jsonc`, `@cloudflare/vite-plugin` en `.wrangler/` zijn weg.
+- **Node target configured**:
+  - Nitro-preset `node-server` (nitro 3.0.260603-beta, niet geüpgraded) → `.output/server/index.mjs`.
+  - Start: `npm run start` (= `node .output/server/index.mjs`, `PORT`/`HOST`).
+  - `.output` draait zelfstandig, ook buiten de repo.
+- **Legacy files archived/removed**:
+  - `supabase/` is gearchiveerd naar `docs/legacy/supabase/` ("ARCHIVED — NOT USED BY APPLICATION"); de doc-links zijn bijgewerkt.
+  - De og:image komt uit `public/og-image.jpg` in plaats van een Lovable/R2-URL.
+- **External dependencies intentionally retained**:
+  - Auth0;
+  - Google Fonts (de resterende externe afhankelijkheid, geen blocker);
+  - de Google Maps-embed;
+  - de social- en contactlinks.
+  - Transitief en ongebruikt: `wrangler`/`miniflare`/`workerd` als optionele peers van nitro's interne dev-runner.
+- **Build validation**:
+  - Root: `npm ci`, **184 tests** (allemaal geslaagd; nieuw: 7 cleanup-guards in `src/self-hosted-build.test.ts`), `npm run build` (Node-output, geen Cloudflare/Lovable/Supabase in `.output`) en `tsc` slagen.
+  - Lint: 0 nieuwe problemen.
+  - `apps/api`: 232 tests (231 geslaagd, 1 overgeslagen), `tsc` en `drizzle-kit check` slagen.
+  - Runtime-rooktest van de gebouwde server: alle publieke routes 200, de og-image wordt geserveerd. Ook de dev-server is getest.
+  - De browsertest met Auth0, API en database is **niet** uitgevoerd.
+- **Historical Supabase data**: **NOT MIGRATED** (bookings, gallery files); aparte fase.
+- **Niet in deze fase**: Docker, Caddy, DNS/SSL en deployment.
+
+**Next phase: "Production Docker Compose infrastructure"**
+
 ## Current architecture
+
+> **Historisch (vóór de migratie).** De huidige architectuur staat in `docs/SELF-HOSTED-ARCHITECTURE.md`.
 
 - **Frontend**: TanStack Start (React 19, SSR-framework op Vite 7), TypeScript strict, file-based routing via `@tanstack/react-router` (`src/routes/`, gegenereerde `src/routeTree.gen.ts`). UI: Tailwind v4, shadcn/ui (Radix), lucide-react, sonner. Formulieren: react-hook-form + zod (alleen reservatie en contact). State: lokale `useState`/`useEffect`; react-query is geïnstalleerd maar ongebruikt.
 - **Data**: alle databasetoegang loopt **rechtstreeks van de browser naar Supabase PostgREST** via `src/integrations/supabase/client.ts` (16 bestanden). Er is geen eigen API. Autorisatie gebeurt volledig via Postgres Row Level Security en `public.has_role()`.
@@ -344,7 +387,7 @@ Details: `docs/PUBLIC-BOOKING-MIGRATION.md` en `docs/PUBLIC-MIGRATION-MAP.md`.
 - **Auth**: Supabase Auth (e-mail + wachtwoord), sessie in `localStorage`, rolcheck in de client via de tabel `user_roles`.
 - **Opslag**: Supabase Storage, publieke bucket `gallery`.
 - **Build/hosting**: `@lovable.dev/vite-tanstack-config`, Cloudflare Workers (`wrangler.jsonc`, `@cloudflare/vite-plugin`).
-- **Database**: Supabase Postgres, schema in `supabase/migrations/` (5 migraties): 11 tabellen, 2 enums, 2 functies, 8 `updated_at`-triggers, RLS-policies en storage-policies.
+- **Database**: Supabase Postgres, schema in `docs/legacy/supabase/migrations/` (5 migraties): 11 tabellen, 2 enums, 2 functies, 8 `updated_at`-triggers, RLS-policies en storage-policies.
 
 ## Target architecture
 
@@ -370,7 +413,7 @@ Internet ──HTTPS──► Caddy (reverse proxy, automatische Let's Encrypt-c
 Fase 0 (alleen beveiliging en documentatie, geen functionele wijzigingen):
 
 - [x] Secret-scan van de working tree en de volledige git-history (alleen Supabase **anon**-JWT's gevonden, geen service-role-key).
-- [x] Plaintext admin-wachtwoord verwijderd uit `supabase/migrations/20260418155052_720bb2c2-….sql`: vervangen door een willekeurig, onbekend wachtwoord (`crypt(gen_random_uuid()::text, …)`). Deze migratie is op de live DB al uitgevoerd en wordt niet opnieuw gedraaid.
+- [x] Plaintext admin-wachtwoord verwijderd uit `docs/legacy/supabase/migrations/20260418155052_720bb2c2-….sql`: vervangen door een willekeurig, onbekend wachtwoord (`crypt(gen_random_uuid()::text, …)`). Deze migratie is op de live DB al uitgevoerd en wordt niet opnieuw gedraaid.
 - [x] `.gitignore` uitgebreid voor productie (`.env`, `.env.*`, `!.env.example`, `node_modules/`, `dist/`, `build/`, `coverage/`, `logs/`, `uploads/`, back-ups, sleutels).
 - [x] `.env` uit de git-index gehaald (`git rm --cached`); het lokale bestand blijft bestaan.
 - [x] `.env.example` met alleen placeholders.
@@ -416,13 +459,13 @@ Datum: 2026-09-29 · Node v22.18.0 · npm 10.9.3 · Windows 11 (win32-x64)
 
 **Supabase database/schema/data inventory and migration preparation.**
 
-Doel: het live Supabase-schema, de policies, de data en de storage-bucket exporteren en vergelijken met `supabase/migrations/`, als basis voor het PostgreSQL-schema. Nog geen backend, Auth0 of Docker.
+Doel: het live Supabase-schema, de policies, de data en de storage-bucket exporteren en vergelijken met `docs/legacy/supabase/migrations/`, als basis voor het PostgreSQL-schema. Nog geen backend, Auth0 of Docker.
 
 ## Pending
 
 - [ ] **Admin-wachtwoord op de live Supabase-database wijzigen** (handmatig, buiten de repo).
 - [ ] Beslissen over het opschonen van de git-history (zie _Known security issues_).
-- [ ] Het live schema en de policies exporteren en vergelijken met `supabase/migrations/`.
+- [ ] Het live schema en de policies exporteren en vergelijken met `docs/legacy/supabase/migrations/`.
 - [ ] Een export maken van alle data en de bestanden in de storage-bucket `gallery`.
 - [x] ~~Lockfile-strategie kiezen~~: npm + `package-lock.json` (zie _Baseline v1_).
 - [ ] Fase 1: alle `supabase.*`-calls achter `src/api/*` zetten, zonder gedragswijziging.
@@ -430,7 +473,7 @@ Doel: het live Supabase-schema, de policies, de data en de storage-bucket export
 
 ## Known security issues
 
-1. **Admin-wachtwoord staat in de git-history** (commit `fb5c91f`, bestand `supabase/migrations/20260418155052_…sql`, regel 23 in die versie). Het wachtwoord in de live DB moet gewijzigd worden. Opschonen van de history is optioneel zodra het wachtwoord gewijzigd is (repo op GitHub: `ilkayyuksel/autowascenter`).
+1. **Admin-wachtwoord staat in de git-history** (commit `fb5c91f`, bestand `docs/legacy/supabase/migrations/20260418155052_…sql`, regel 23 in die versie). Het wachtwoord in de live DB moet gewijzigd worden. Opschonen van de history is optioneel zodra het wachtwoord gewijzigd is (repo op GitHub: `ilkayyuksel/autowascenter`).
 2. **`.env` staat nog in de git-history** (Supabase URL, project-ref en anon-key). Dat is laag risico, want de anon-key zit sowieso in de publieke frontendbundel. Wel misbruikbaar in combinatie met punt 3.
 3. **Anonieme `INSERT` op `bookings` en `booking_services` met `WITH CHECK (true)`**: de client bepaalt `total_price`, `status`, `location_fee` en `cancel_token`, en kan `booking_services` aan een willekeurige `booking_id` koppelen.
 4. **Geen rate limiting of captcha** op het aanmaken van boekingen, dus spam is mogelijk.

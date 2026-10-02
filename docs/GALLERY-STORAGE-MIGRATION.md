@@ -4,7 +4,7 @@ Phase 6C: gallery image storage moves from Supabase Storage to self-hosted local
 
 ## Current Supabase Storage
 
-Source: `src/routes/admin/galerij.tsx`, `src/routes/galerij.tsx`, `supabase/migrations/20260418141959_….sql` (lines 192–212).
+Source: `src/routes/admin/galerij.tsx`, `src/routes/galerij.tsx`, `docs/legacy/supabase/migrations/20260418141959_….sql` (lines 192–212).
 
 | Aspect             | Current behaviour (Supabase)                                                                                                      |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |

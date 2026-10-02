@@ -8,8 +8,13 @@ import {
 } from "@tanstack/react-router";
 import { AdminAuthProvider } from "@/components/admin/AdminAuthProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { SITE } from "@/lib/site";
 
 import appCss from "../styles.css?url";
+
+// Social preview image, served by this app from public/og-image.jpg. Crawlers need an
+// absolute URL, so it is built from the site's own domain (no externally hosted asset).
+const OG_IMAGE_URL = `https://${SITE.domain}/og-image.jpg`;
 
 function NotFoundComponent() {
   return (
@@ -49,8 +54,8 @@ export const Route = createRootRoute({
       { name: "twitter:title", content: "Autowascenter — Premium Auto Detailing in Sint-Niklaas" },
       { property: "og:description", content: "Premium auto detailing in Sint-Niklaas. Handwas, interieurreiniging, keramische coating en meer. Reserveer eenvoudig online." },
       { name: "twitter:description", content: "Premium auto detailing in Sint-Niklaas. Handwas, interieurreiniging, keramische coating en meer. Reserveer eenvoudig online." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ab8c3d5c-b19a-4ce1-b0b2-760475c415b9/id-preview-5ceec3d4--3cab7cad-0bb1-4fa3-bcfe-f9627b6bf113.lovable.app-1776601570956.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ab8c3d5c-b19a-4ce1-b0b2-760475c415b9/id-preview-5ceec3d4--3cab7cad-0bb1-4fa3-bcfe-f9627b6bf113.lovable.app-1776601570956.png" },
+      { property: "og:image", content: OG_IMAGE_URL },
+      { name: "twitter:image", content: OG_IMAGE_URL },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

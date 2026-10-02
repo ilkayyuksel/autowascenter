@@ -1,5 +1,7 @@
 # Current Dependencies (snapshot Fase 0)
 
+> **Historisch (Fase 0).** Supabase, Lovable en Cloudflare zijn in Fase 7C verwijderd; zie `docs/SELF-HOSTED-ARCHITECTURE.md` en `docs/DEPRECATION-CLEANUP-MAP.md`.
+
 Snapshot van 2026-09-28, commit `05ac806`.
 
 - **VERSION** = het bereik uit `package.json`, met tussen haakjes de versie die geïnstalleerd werd met `npm install --no-package-lock` op de Fase-0-baseline.
@@ -29,7 +31,7 @@ Snapshot van 2026-09-28, commit `05ac806`.
 | `@supabase/supabase-js`      | `^2.103.3` (2.117.2) | `src/integrations/supabase/client.ts` + 16 importerende bestanden (zie hieronder) | Database (PostgREST), auth, storage               | Eigen REST API + getypte client `src/api/*`       | TO BE REMOVED  |
 | Supabase-types (gegenereerd) | PostgREST 14.5       | `src/integrations/supabase/types.ts`                                              | TypeScript-types van het DB-schema                | Types uit Drizzle-schema / gedeelde zod-schema's  | TO BE REPLACED |
 | Supabase-project config      | n.v.t.               | `supabase/config.toml`                                                            | Project-ref                                       | Geen                                              | TO BE REMOVED  |
-| Supabase-migraties           | 5 bestanden          | `supabase/migrations/*.sql`                                                       | Schema, RLS, storage-bucket, seeds, admin-account | Drizzle-migraties voor PostgreSQL (bronmateriaal) | TO BE REPLACED |
+| Supabase-migraties           | 5 bestanden          | `docs/legacy/supabase/migrations/*.sql`                                                       | Schema, RLS, storage-bucket, seeds, admin-account | Drizzle-migraties voor PostgreSQL (bronmateriaal) | TO BE REPLACED |
 | Supabase env-variabelen      | n.v.t.               | `.env` (untracked), `.env.example`                                                | URL, anon-key, project-ref                        | `VITE_API_BASE_URL`, `DATABASE_URL`, …            | TO BE REPLACED |
 
 Bestanden die `@/integrations/supabase/client` importeren: `src/hooks/useAdminAuth.ts`, `src/lib/slots.ts`, `src/components/{RealisationsPreview,ServicesPreview,Testimonials}.tsx`, `src/components/admin/AdminLayout.tsx`, `src/routes/{admin-login,diensten,galerij,reservatie}.tsx`, `src/routes/admin/{index,agenda,reservaties,diensten,voertuigen,blokkades,galerij,instellingen}.tsx`.
@@ -56,7 +58,7 @@ Bestanden die `@/integrations/supabase/client` importeren: `src/hooks/useAdminAu
 | NAME                                           | VERSION        | BESTAND(EN)             | DOEL                   | TARGET REPLACEMENT                 | STATUS              |
 | ---------------------------------------------- | -------------- | ----------------------- | ---------------------- | ---------------------------------- | ------------------- |
 | Supabase Postgres (beheerd door Lovable Cloud) | PostgREST 14.5 | alle data-calls         | Opslag van alle data   | PostgreSQL-container (bijv. 16/17) | TO BE REPLACED      |
-| Row Level Security-policies                    | SQL            | `supabase/migrations/*` | Autorisatie            | Autorisatie in de backend          | TO BE REMOVED       |
+| Row Level Security-policies                    | SQL            | `docs/legacy/supabase/migrations/*` | Autorisatie            | Autorisatie in de backend          | TO BE REMOVED       |
 | Triggers `update_updated_at_column`            | SQL            | migraties               | `updated_at` bijhouden | Trigger meenemen of ORM-default    | KEEP (herschrijven) |
 | ORM                                            | ontbreekt      | —                       | —                      | Drizzle ORM + `pg` (voorstel)      | TO BE ADDED         |
 

@@ -1,6 +1,7 @@
 // Self-hosted PostgreSQL schema for Autowascenter.
 //
-// Derived from the Supabase schema (supabase/migrations, docs/DATABASE-INVENTORY.md).
+// Derived from the Supabase schema (archived in docs/legacy/supabase/migrations, see
+// docs/DATABASE-INVENTORY.md).
 // Deliberately NOT included: user_roles, app_role, has_role(), auth.* and storage.*
 // (authentication/authorization move to Auth0 RBAC, files to a self-hosted volume).
 //

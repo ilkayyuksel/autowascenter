@@ -1,6 +1,6 @@
-// Pure display helpers for the admin UI (agenda grid, durations). The admin no longer imports
-// src/lib/slots.ts: that module (and its Supabase reads) is only used by the public booking
-// page until that page is migrated. Admin availability comes from GET /api/admin/availability.
+// Pure display helpers (agenda grid, durations). Availability is never computed in the
+// browser: admin and public pages get their slots from the API (GET /api/admin/availability,
+// GET /api/availability).
 
 export function timeToMinutes(t: string) {
   const [h, m] = t.split(":").map(Number);

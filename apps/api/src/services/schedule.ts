@@ -1,4 +1,4 @@
-// Pure scheduling rules, ported from src/lib/slots.ts (see docs/BOOKING-BUSINESS-LOGIC.md).
+// Pure scheduling rules, ported from the former src/lib/slots.ts (removed in phase 7C) (see docs/BOOKING-BUSINESS-LOGIC.md).
 // No database access: callers pass settings, bookings and blocked periods.
 
 import { addDays, fromLocal, minutesToTime, timeToMinutes } from "../lib/business-time.ts";
@@ -13,7 +13,7 @@ export interface ScheduleSettings {
   intervalMinutes: number;
 }
 
-/** Same fallback as src/lib/slots.ts when site_settings has no row. */
+/** Same fallback as the former src/lib/slots.ts when site_settings has no row. */
 export const FALLBACK_SETTINGS = { openingHour: "10:00", closingHour: "21:00", slotInterval: 30 };
 
 export function toScheduleSettings(openingHour: string, closingHour: string, slotInterval: number) {
