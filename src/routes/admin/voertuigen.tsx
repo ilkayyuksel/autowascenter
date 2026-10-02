@@ -1,10 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Plus, Trash2, Save } from "lucide-react";
-// WRITE side (create, update, delete, pricing save) still uses Supabase until phase 6D-2.
-import { supabase } from "@/integrations/supabase/client";
+// Reads and writes through the API; pricing rows of a new type are created by the server,
+// and the matrix is saved all-or-nothing with one PUT.
 import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { useAdminMutation } from "@/hooks/useAdminMutation";
+import {
+  createAdminVehicleType,
+  deleteAdminVehicleType,
+  updateAdminPricing,
+  updateAdminVehicleType,
+} from "@/lib/api/admin-writes";
 import { AdminLoadError } from "@/components/admin/AdminLoadError";
 import {
   loadVehiclesPage,
@@ -27,6 +33,9 @@ export const Route = createFileRoute("/admin/voertuigen")({
 type VehicleType = VehicleTypeItem;
 type Service = PricingService;
 type Vts = PricingRow;
+type VehiclePatch = Partial<
+  Pick<VehicleType, "title" | "description" | "image_url" | "active" | "sort_order">
+>;
 
 function AdminVehiclesPage() {
   const [vts, setVts] = useState<Vts[]>([]);
@@ -53,56 +62,46 @@ function AdminVehiclesPage() {
     refresh();
   }, [refresh]);
 
+  const { mutate } = useAdminMutation();
+
+  // POST /api/admin/vehicle-types: slug, title, sort order and a pricing row for every
+  // active, bookable service are created by the server, in one transaction.
   const addVehicle = async () => {
-    const slug = `nieuw-${Date.now()}`;
-    const { data, error } = await supabase
-      .from("vehicle_types")
-      .insert({ slug, title: "Nieuw voertuigtype", sort_order: vehicles.length * 10 })
-      .select()
-      .single();
-    if (error) return toast.error(error.message);
-    if (data) {
-      // Auto-create vts rows for all services
-      const rows = services.map((s) => ({
-        vehicle_type_id: data.id,
-        service_id: s.id,
-        available: true,
-        price: 30,
-        duration_minutes: 60,
-      }));
-      if (rows.length) await supabase.from("vehicle_type_services").insert(rows);
-      toast.success("Voertuigtype aangemaakt");
-      refresh();
-    }
+    const created = await mutate((api) => createAdminVehicleType(api), {
+      success: "Voertuigtype aangemaakt",
+    });
+    if (created) refresh();
   };
 
-  const updateVehicle = async (id: string, patch: Partial<VehicleType>) => {
-    const { error } = await supabase.from("vehicle_types").update(patch).eq("id", id);
-    if (error) return toast.error(error.message);
+  const updateVehicle = async (id: string, patch: VehiclePatch) => {
+    await mutate((api) => updateAdminVehicleType(api, id, patch), { onStale: refresh });
     refresh();
   };
 
+  // 409 RESOURCE_IN_USE (still used by bookings) is shown as a clear message.
   const deleteVehicle = async (id: string) => {
     if (!confirm("Verwijderen?")) return;
-    const { error } = await supabase.from("vehicle_types").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Verwijderd");
-    refresh();
+    const done = await mutate((api) => deleteAdminVehicleType(api, id).then(() => true), {
+      success: "Verwijderd",
+      onStale: refresh,
+    });
+    if (done) refresh();
   };
 
   const updateVts = async (vtsId: string, patch: Partial<Vts>) => {
     setVts((curr) => curr.map((x) => (x.id === vtsId ? { ...x, ...patch } : x)));
   };
 
+  // PUT /api/admin/vehicle-types/:id/pricing with all rows of the open type (also rows that
+  // are hidden here); one invalid row → nothing is saved. Then reload the matrix.
   const saveVts = async () => {
-    const updates = vts.map((v) =>
-      supabase
-        .from("vehicle_type_services")
-        .update({ available: v.available, price: v.price, duration_minutes: v.duration_minutes })
-        .eq("id", v.id),
-    );
-    await Promise.all(updates);
-    toast.success("Prijzen opgeslagen");
+    if (!selectedVehicle) return;
+    const rows = vts.filter((v) => v.vehicle_type_id === selectedVehicle);
+    const saved = await mutate((api) => updateAdminPricing(api, selectedVehicle, rows), {
+      success: "Prijzen opgeslagen",
+      onStale: refresh,
+    });
+    if (saved) refresh();
   };
 
   const currentVts = vts.filter((v) => v.vehicle_type_id === selectedVehicle);

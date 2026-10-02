@@ -17,6 +17,9 @@ import {
   vehicleTypesResponse,
   type AdminBlockedPeriod,
   type AdminBooking,
+  type AdminGalleryItem,
+  type AdminService,
+  type AdminSettings,
   type AdminVehicleType,
   type DashboardData,
   type PaginationMeta,
@@ -233,7 +236,16 @@ export async function loadBookingsPage(
 }
 
 export interface BookingDetailView extends BookingRow {
-  lines: { id: string; service_title: string; price: number; duration_minutes: number }[];
+  /** Current vehicle type (null if it was deleted), for editing the booking. */
+  vehicle_type_id: string | null;
+  vehicle_type_title: string | null;
+  lines: {
+    id: string;
+    service_id: string | null;
+    service_title: string;
+    price: number;
+    duration_minutes: number;
+  }[];
 }
 
 export async function loadBookingDetail(
@@ -248,8 +260,11 @@ export async function loadBookingDetail(
   );
   return {
     ...toBookingRow(data),
+    vehicle_type_id: data.vehicle_type?.id ?? null,
+    vehicle_type_title: data.vehicle_type?.title ?? null,
     lines: data.services.map((l) => ({
       id: l.id,
+      service_id: l.service_id,
       service_title: l.service_title,
       price: l.price,
       duration_minutes: l.duration_minutes,
@@ -272,20 +287,22 @@ export interface ServiceItem {
   kind: ServiceKind;
 }
 
+export const toServiceItem = (s: AdminService): ServiceItem => ({
+  id: s.id,
+  title: s.title,
+  description: s.description,
+  icon: s.icon,
+  category: s.category,
+  badge: s.badge,
+  bookable: s.bookable,
+  sort_order: s.sort_order,
+  active: s.active,
+  kind: s.kind,
+});
+
 export async function loadServices(api: ApiClient, { signal }: Opts = {}) {
   const { data } = await api.getAdmin("/api/admin/services", servicesResponse, { signal });
-  const items: ServiceItem[] = data.map((s) => ({
-    id: s.id,
-    title: s.title,
-    description: s.description,
-    icon: s.icon,
-    category: s.category,
-    badge: s.badge,
-    bookable: s.bookable,
-    sort_order: s.sort_order,
-    active: s.active,
-    kind: s.kind,
-  }));
+  const items: ServiceItem[] = data.map(toServiceItem);
   /** Package contents per package id (was: package_services rows). */
   const contents: Record<string, string[]> = {};
   for (const s of data)
@@ -402,6 +419,10 @@ export interface SettingsForm {
 
 export async function loadSettings(api: ApiClient, { signal }: Opts = {}): Promise<SettingsForm> {
   const { data } = await api.getAdmin("/api/admin/settings", settingsResponse, { signal });
+  return toSettingsForm(data);
+}
+
+export function toSettingsForm(data: AdminSettings): SettingsForm {
   return {
     id: data.id,
     km_fee: data.km_fee,
@@ -427,15 +448,17 @@ export interface GalleryItem {
   sort_order: number;
 }
 
+export const toGalleryItem = (g: AdminGalleryItem): GalleryItem => ({
+  id: g.id,
+  title: g.title,
+  description: g.description,
+  image_url: g.image_url,
+  before_image_url: g.before_image_url,
+  category: g.category,
+  sort_order: g.sort_order,
+});
+
 export async function loadGallery(api: ApiClient, { signal }: Opts = {}): Promise<GalleryItem[]> {
   const { data } = await api.getAdmin("/api/admin/gallery", galleryResponse, { signal });
-  return data.map((g) => ({
-    id: g.id,
-    title: g.title,
-    description: g.description,
-    image_url: g.image_url,
-    before_image_url: g.before_image_url,
-    category: g.category,
-    sort_order: g.sort_order,
-  }));
+  return data.map(toGalleryItem);
 }

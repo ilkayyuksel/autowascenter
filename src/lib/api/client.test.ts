@@ -218,3 +218,89 @@ describe("createApiClient", () => {
     }
   });
 });
+
+describe("admin writes (POST, PATCH, PUT, DELETE, multipart)", () => {
+  test("JSON writes: method, Bearer header, JSON body and parsed response", async () => {
+    for (const method of ["POST", "PATCH", "PUT"] as const) {
+      const { api, calls } = client(() => jsonResponse(method === "POST" ? 201 : 200, OK));
+      const call =
+        method === "POST"
+          ? api.postAdmin("/api/admin/x", { a: 1 }, okSchema)
+          : method === "PATCH"
+            ? api.patchAdmin("/api/admin/x", { a: 1 }, okSchema)
+            : api.putAdmin("/api/admin/x", { a: 1 }, okSchema);
+      assert.deepEqual(await call, OK);
+      assert.equal(calls[0]!.method, method);
+      assert.equal(calls[0]!.headers.get("authorization"), `Bearer ${ACCESS_TOKEN}`);
+      assert.equal(calls[0]!.headers.get("content-type"), "application/json");
+      assert.deepEqual(calls[0]!.json, { a: 1 });
+    }
+  });
+
+  test("DELETE: 204 without body resolves; errors still map", async () => {
+    const { api, calls } = client(() => new Response(null, { status: 204 }));
+    assert.equal(await api.deleteAdmin("/api/admin/x/1"), undefined);
+    assert.equal(calls[0]!.method, "DELETE");
+    assert.equal(calls[0]!.headers.get("authorization"), `Bearer ${ACCESS_TOKEN}`);
+    const { api: api2 } = client(() => apiError(409, "RESOURCE_IN_USE"));
+    await rejectsWith(api2.deleteAdmin("/api/admin/x/1"), 409, "RESOURCE_IN_USE");
+  });
+
+  test("multipart: FormData sent as is (fetch sets the boundary), Bearer header", async () => {
+    const { api, calls } = client(() => jsonResponse(201, OK));
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }),
+      "x",
+    );
+    assert.deepEqual(await api.postAdminForm("/api/admin/gallery/upload", form, okSchema), OK);
+    assert.equal(calls[0]!.method, "POST");
+    assert.ok(calls[0]!.body instanceof FormData);
+    assert.equal(calls[0]!.headers.has("content-type"), false);
+    assert.equal(calls[0]!.headers.get("authorization"), `Bearer ${ACCESS_TOKEN}`);
+  });
+
+  test("write errors map to ApiError: 400, 401, 403, 404, 409, 422, 500, 503", async () => {
+    const cases: [number, string][] = [
+      [400, "VALIDATION_ERROR"],
+      [401, "AUTHENTICATION_INVALID"],
+      [403, "AUTHORIZATION_REQUIRED"],
+      [404, "RESOURCE_NOT_FOUND"],
+      [409, "BOOKING_SLOT_UNAVAILABLE"],
+      [422, "BOOKING_IN_PAST"],
+      [500, "INTERNAL_ERROR"],
+      [503, "STORAGE_UNAVAILABLE"],
+    ];
+    for (const [status, code] of cases) {
+      const { api } = client(() => apiError(status, code));
+      await rejectsWith(api.postAdmin("/api/admin/x", {}, okSchema), status, code);
+      await rejectsWith(api.patchAdmin("/api/admin/x", {}, okSchema), status, code);
+    }
+  });
+
+  test("write timeout (per-request override) settles as TIMEOUT", async () => {
+    const api = createApiClient({
+      baseUrl: BASE,
+      fetchImpl: hangingFetch,
+      timeoutMs: 60_000,
+      getAccessToken: async () => ACCESS_TOKEN,
+    });
+    await rejectsWith(
+      api.postAdmin("/api/admin/x", {}, okSchema, { timeoutMs: 20 }),
+      0,
+      CLIENT_ERROR.TIMEOUT,
+    );
+  });
+
+  test("no token → no write request", async () => {
+    const { impl, calls } = fakeFetch(() => jsonResponse(200, OK));
+    const api = createApiClient({
+      baseUrl: BASE,
+      fetchImpl: impl,
+      getAccessToken: async () => undefined,
+    });
+    await rejectsWith(api.deleteAdmin("/api/admin/x/1"), 401, CLIENT_ERROR.SESSION_EXPIRED);
+    assert.equal(calls.length, 0);
+  });
+});

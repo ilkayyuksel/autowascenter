@@ -1,12 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { Upload, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-// WRITE side (upload, save, delete) still uses Supabase until phase 6D-3.
-import { supabase } from "@/integrations/supabase/client";
+// Reads, metadata writes and image uploads through the API; the server stores the files
+// (self-hosted storage) and deletes a managed file together with its item.
 import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { useAdminMutation } from "@/hooks/useAdminMutation";
 import { AdminLoadError } from "@/components/admin/AdminLoadError";
-import { loadGallery, type GalleryItem } from "@/lib/api/admin-reads";
+import { loadGallery, toGalleryItem, type GalleryItem } from "@/lib/api/admin-reads";
+import {
+  deleteGalleryItem,
+  updateGalleryItem,
+  uploadGalleryImage,
+  UPLOAD_TYPES,
+} from "@/lib/api/admin-writes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,49 +37,48 @@ function GalleryAdmin() {
 
   useEffect(() => { load(); }, [load]);
 
+  const { mutate } = useAdminMutation();
+
+  // POST /api/admin/gallery/upload (multipart): the server checks type and size, stores the
+  // file and creates the item; the response (with the new image_url) is shown directly.
   const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const filename = `${crypto.randomUUID()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("gallery").upload(filename, file);
-    if (upErr) {
-      setUploading(false);
-      return toast.error("Upload mislukt: " + upErr.message);
-    }
-    const { data: urlData } = supabase.storage.from("gallery").getPublicUrl(filename);
-    const { data, error } = await supabase
-      .from("gallery_items")
-      .insert({ image_url: urlData.publicUrl, sort_order: items.length })
-      .select()
-      .single();
+    const created = await mutate((api) => uploadGalleryImage(api, file), {
+      success: "Afbeelding toegevoegd",
+    });
     setUploading(false);
-    if (error) return toast.error("Opslaan mislukt");
-    if (data) setItems([...items, data as Item]);
-    toast.success("Afbeelding toegevoegd");
-    e.target.value = "";
+    input.value = "";
+    if (created) setItems((arr) => [...arr, toGalleryItem(created)]);
   };
 
   const updateField = (id: string, patch: Partial<Item>) =>
     setItems((arr) => arr.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   const save = async (it: Item) => {
-    const { error } = await supabase.from("gallery_items").update({
-      title: it.title, description: it.description, sort_order: it.sort_order,
-    }).eq("id", it.id);
-    if (error) return toast.error("Opslaan mislukt");
-    toast.success("Opgeslagen");
+    const saved = await mutate(
+      (api) =>
+        updateGalleryItem(api, it.id, {
+          title: it.title,
+          description: it.description,
+          sort_order: it.sort_order,
+        }),
+      { success: "Opgeslagen", onStale: load },
+    );
+    if (saved) setItems((arr) => arr.map((x) => (x.id === saved.id ? toGalleryItem(saved) : x)));
   };
 
+  // DELETE /api/admin/gallery/:id: the server removes the item and, only if it manages the
+  // file itself, the stored image. The browser never handles file names or storage paths.
   const remove = async (it: Item) => {
     if (!confirm("Afbeelding verwijderen?")) return;
-    // Try to remove from storage too (extract filename)
-    const filename = it.image_url.split("/").pop();
-    if (filename) await supabase.storage.from("gallery").remove([filename]);
-    const { error } = await supabase.from("gallery_items").delete().eq("id", it.id);
-    if (error) return toast.error("Verwijderen mislukt");
-    setItems((arr) => arr.filter((x) => x.id !== it.id));
+    const done = await mutate((api) => deleteGalleryItem(api, it.id).then(() => true), {
+      success: "Verwijderd",
+      onStale: load,
+    });
+    if (done) load();
   };
 
   return (
@@ -84,7 +89,7 @@ function GalleryAdmin() {
           <p className="mt-2 text-muted-foreground">Upload en beheer realisaties.</p>
         </div>
         <label>
-          <input type="file" accept="image/*" onChange={handleUpload} className="hidden" disabled={uploading} />
+          <input type="file" accept={UPLOAD_TYPES.join(",")} onChange={handleUpload} className="hidden" disabled={uploading} />
           <Button asChild className="bg-gradient-primary cursor-pointer">
             <span><Upload className="h-4 w-4" /> {uploading ? "Bezig..." : "Afbeelding toevoegen"}</span>
           </Button>

@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Phone, Mail, Trash2, MapPin, Euro, Clock, Plus, Eye, ChevronLeft, ChevronRight } from "lucide-react";
-import { toast } from "sonner";
-// WRITE side (status change, delete, create) still uses Supabase until phase 6D-2.
-import { supabase } from "@/integrations/supabase/client";
+// Reads and writes through the API: GET/POST/PATCH/DELETE /api/admin/bookings.
 import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { useAdminMutation } from "@/hooks/useAdminMutation";
+import { BookingCreateDialog } from "@/components/admin/BookingCreateDialog";
+import { deleteAdminBooking, updateAdminBooking } from "@/lib/api/admin-writes";
 import { AdminLoadError } from "@/components/admin/AdminLoadError";
 import {
   loadBookingDetail,
@@ -15,11 +16,8 @@ import {
   type BookingRow,
 } from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -70,56 +68,25 @@ function BookingsAdmin() {
 
   useEffect(() => { load(); }, [load]);
 
+  const { mutate } = useAdminMutation();
+
+  // PATCH status (cancel → server sets cancelled_at; reactivate → server re-checks overlap),
+  // then reload the authoritative list.
   const updateStatus = async (id: string, status: Booking["status"]) => {
-    const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
-    if (error) return toast.error("Update mislukt");
-    setBookings((b) => b.map((x) => (x.id === id ? { ...x, status } : x)));
-    toast.success("Status bijgewerkt");
+    await mutate((api) => updateAdminBooking(api, id, { status }), {
+      success: "Status bijgewerkt",
+    });
+    load();
   };
 
   const remove = async (id: string) => {
     if (!confirm("Reservatie verwijderen?")) return;
-    const { error } = await supabase.from("bookings").delete().eq("id", id);
-    if (error) return toast.error("Verwijderen mislukt");
-    setBookings((b) => b.filter((x) => x.id !== id));
-    toast.success("Verwijderd");
+    await mutate((api) => deleteAdminBooking(api, id).then(() => true), { success: "Verwijderd" });
+    load();
   };
 
   const [openNew, setOpenNew] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const emptyForm = {
-    customer_name: "", customer_email: "", customer_phone: "",
-    vehicle_brand: "", vehicle_model: "",
-    service_title: "", preferred_date: "", preferred_time: "",
-    total_duration_minutes: 60, total_price: 0, notes: "",
-  };
-  const [form, setForm] = useState(emptyForm);
-
-  const createBooking = async () => {
-    if (!form.customer_name || !form.customer_phone || !form.preferred_date || !form.preferred_time) {
-      return toast.error("Vul minstens naam, gsm, datum en uur in");
-    }
-    const { error } = await supabase.from("bookings").insert({
-      customer_name: form.customer_name,
-      customer_email: form.customer_email || "geen@autowascenter.be",
-      customer_phone: form.customer_phone,
-      vehicle_brand: form.vehicle_brand || null,
-      vehicle_model: form.vehicle_model || null,
-      service_title: form.service_title || null,
-      preferred_date: form.preferred_date,
-      preferred_time: form.preferred_time,
-      total_duration_minutes: form.total_duration_minutes,
-      total_price: form.total_price,
-      notes: form.notes || null,
-      status: "bevestigd",
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Reservatie aangemaakt");
-    setOpenNew(false);
-    setForm(emptyForm);
-    load();
-  };
-
   return (
     <div>
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -258,72 +225,17 @@ function BookingsAdmin() {
         </div>
       )}
 
-      {/* New booking dialog */}
-      <Dialog open={openNew} onOpenChange={setOpenNew}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Nieuwe afspraak</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Naam *</Label>
-                <Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
-              </div>
-              <div>
-                <Label>GSM *</Label>
-                <Input value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <Label>E-mail</Label>
-              <Input type="email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Merk</Label>
-                <Input value={form.vehicle_brand} onChange={(e) => setForm({ ...form, vehicle_brand: e.target.value })} />
-              </div>
-              <div>
-                <Label>Model</Label>
-                <Input value={form.vehicle_model} onChange={(e) => setForm({ ...form, vehicle_model: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <Label>Dienst(en)</Label>
-              <Input value={form.service_title} onChange={(e) => setForm({ ...form, service_title: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Datum *</Label>
-                <Input type="date" value={form.preferred_date} onChange={(e) => setForm({ ...form, preferred_date: e.target.value })} />
-              </div>
-              <div>
-                <Label>Uur *</Label>
-                <Input type="time" value={form.preferred_time} onChange={(e) => setForm({ ...form, preferred_time: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Duur (min)</Label>
-                <Input type="number" value={form.total_duration_minutes} onChange={(e) => setForm({ ...form, total_duration_minutes: Number(e.target.value) })} />
-              </div>
-              <div>
-                <Label>Prijs (€)</Label>
-                <Input type="number" step="0.01" value={form.total_price} onChange={(e) => setForm({ ...form, total_price: Number(e.target.value) })} />
-              </div>
-            </div>
-            <div>
-              <Label>Notities</Label>
-              <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenNew(false)}>Annuleren</Button>
-            <Button onClick={createBooking} className="bg-gradient-primary">Aanmaken</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* New booking: same API flow as the agenda (server pricing, duration and slots) */}
+      {openNew && (
+        <BookingCreateDialog
+          open={openNew}
+          onOpenChange={setOpenNew}
+          onCreated={() => {
+            setOpenNew(false);
+            load();
+          }}
+        />
+      )}
 
       {/* Detail dialog: GET /api/admin/bookings/:id (no Supabase fallback) */}
       {detailId && <BookingDetailDialog id={detailId} onClose={() => setDetailId(null)} />}

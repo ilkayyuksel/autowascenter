@@ -1,12 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, Save } from "lucide-react";
-import { toast } from "sonner";
-// WRITE side (create, save, package contents, delete) still uses Supabase until phase 6D-2.
-import { supabase } from "@/integrations/supabase/client";
+// Reads and writes through the API (services, package contents); pricing rows for a new
+// service are created by the server in the same transaction.
 import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { useAdminMutation } from "@/hooks/useAdminMutation";
 import { AdminLoadError } from "@/components/admin/AdminLoadError";
-import { loadServices, type ServiceItem, type ServiceKind } from "@/lib/api/admin-reads";
+import {
+  loadServices,
+  toServiceItem,
+  type ServiceItem,
+  type ServiceKind,
+} from "@/lib/api/admin-reads";
+import {
+  createAdminService,
+  deleteAdminService,
+  updateAdminService,
+  updatePackageContent,
+} from "@/lib/api/admin-writes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,50 +56,52 @@ function ServicesAdmin() {
 
   useEffect(() => { load(); }, [load]);
 
+  const { mutate } = useAdminMutation();
+
+  // POST /api/admin/services: defaults (title, icon, sort order) and a pricing row for every
+  // vehicle type are created by the server, in one transaction.
   const addNew = async (kind: Kind) => {
-    const title = kind === "pakket" ? "Nieuw pakket" : kind === "extra" ? "Nieuwe extra dienst" : "Nieuwe dienst";
-    const { data, error } = await supabase
-      .from("services")
-      .insert({ title, sort_order: items.length, icon: "sparkles", kind })
-      .select()
-      .single();
-    if (error) return toast.error("Aanmaken mislukt");
-    if (data) {
-      // create price rows for all vehicle types so it can be priced immediately
-      const { data: vts } = await supabase.from("vehicle_types").select("id");
-      if (vts?.length) {
-        await supabase.from("vehicle_type_services").insert(
-          vts.map((v) => ({ vehicle_type_id: v.id, service_id: data.id, available: true, price: 0, duration_minutes: 60 })),
-        );
-      }
-      setItems([...items, data as Service]);
-      toast.success("Aangemaakt — stel prijs & duur in onder Voertuigen & prijzen");
-    }
+    const created = await mutate((api) => createAdminService(api, { kind }), {
+      success: "Aangemaakt — stel prijs & duur in onder Voertuigen & prijzen",
+    });
+    if (created) load();
   };
 
+  // PATCH the service; for a package also PUT the complete contents (replaced server-side
+  // in one transaction). The card then shows the API's response; other cards keep their
+  // unsaved edits.
   const save = async (s: Service) => {
-    const { error } = await supabase.from("services").update({
-      title: s.title, description: s.description,
-      icon: s.icon, category: s.category, badge: s.badge,
-      bookable: s.bookable, sort_order: s.sort_order, active: s.active, kind: s.kind,
-    }).eq("id", s.id);
-    if (error) return toast.error("Opslaan mislukt");
-    if (s.kind === "pakket") {
-      await supabase.from("package_services").delete().eq("package_id", s.id);
-      const ids = contents[s.id] ?? [];
-      if (ids.length) {
-        const { error: e2 } = await supabase.from("package_services").insert(ids.map((sid) => ({ package_id: s.id, service_id: sid })));
-        if (e2) return toast.error("Pakketinhoud opslaan mislukt");
-      }
+    const saved = await mutate(
+      async (api) => {
+        let result = await updateAdminService(api, s.id, {
+          title: s.title,
+          description: s.description,
+          icon: s.icon,
+          category: s.category,
+          badge: s.badge,
+          bookable: s.bookable,
+          sort_order: s.sort_order,
+          active: s.active,
+          kind: s.kind,
+        });
+        if (s.kind === "pakket") result = await updatePackageContent(api, s.id, contents[s.id] ?? []);
+        return result;
+      },
+      { success: "Opgeslagen", onStale: load },
+    );
+    if (saved) {
+      setItems((list) => list.map((x) => (x.id === saved.id ? toServiceItem(saved) : x)));
+      setContents((c) => ({ ...c, [saved.id]: [...saved.included_service_ids] }));
     }
-    toast.success("Opgeslagen");
   };
 
   const remove = async (id: string) => {
     if (!confirm("Verwijderen?")) return;
-    const { error } = await supabase.from("services").delete().eq("id", id);
-    if (error) return toast.error("Verwijderen mislukt");
-    setItems(items.filter((x) => x.id !== id));
+    const done = await mutate((api) => deleteAdminService(api, id).then(() => true), {
+      success: "Verwijderd",
+      onStale: load,
+    });
+    if (done) load();
   };
 
   const update = (id: string, patch: Partial<Service>) =>

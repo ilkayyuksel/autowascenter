@@ -15,7 +15,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 6B: admin-API write-side                      | **Afgerond** (zie _Phase 6B_); frontend nog niet aangesloten                   |
 | Fase 6C: gallery storage (self-hosted)             | **Afgerond** (zie _Phase 6C_); frontend en bestaande bestanden niet gemigreerd |
 | Fase 6D-1: admin-frontend READ-migratie            | **Afgerond** (zie _Phase 6D-1_); admin-writes nog via Supabase                 |
-| Volgende fase                                      | **Admin frontend WRITE migration** (6D-2)                                      |
+| Fase 6D-2: admin-frontend WRITE-migratie           | **Afgerond** (zie _Phase 6D-2_); admin volledig via de eigen API               |
+| Volgende fase                                      | **Remove Supabase from the admin/application path**                            |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
@@ -214,7 +215,7 @@ Details: `docs/ADMIN-FRONTEND-MIGRATION.md`.
   - 503, netwerkfouten en timeouts tonen een tijdelijke fout met "Opnieuw proberen".
   - `SETTINGS_NOT_CONFIGURED` toont een configuratiefout.
   - Geen enkele pagina blijft eindeloos laden.
-- **Remaining Supabase writes**: alle admin-writes blijven op Supabase. Dat geldt voor agenda, reservaties, diensten, voertuigen, blokkades, instellingen en galerij, inclusief de storage-upload.
+- **Remaining Supabase writes** (stand na 6D-1, opgelost in 6D-2): alle admin-writes blijven op Supabase. Dat geldt voor agenda, reservaties, diensten, voertuigen, blokkades, instellingen en galerij, inclusief de storage-upload.
   - Ook de slot-controle vóór het opslaan in de agenda-dialogen (`fetchSlotData`) blijft op Supabase. Die hoort bij de write-flow en verhuist in 6D-2 naar `GET /api/admin/availability`.
   - Sinds Fase 5 weigert Supabase-RLS deze writes, omdat er geen Supabase-sessie meer is. Opslaan werkt dus pas na 6D-2. Deze branch mag in deze toestand niet gedeployed worden.
 - **Tests**: root `npm test` telt nu **67 tests, allemaal geslaagd**: 11 bestaande en 56 nieuwe.
@@ -225,6 +226,48 @@ Details: `docs/ADMIN-FRONTEND-MIGRATION.md`.
 - **Lint**: 0 nieuwe problemen. In de gewijzigde pagina's daalt het aantal bestaande meldingen licht, onder meer doordat de `as any` in `agenda.tsx` verdwenen is.
 
 **Next phase: "Admin frontend WRITE migration"**
+
+## Phase 6D-2 — Admin frontend WRITE migration
+
+**Status: COMPLETE**
+
+Details: `docs/ADMIN-FRONTEND-MIGRATION.md`.
+
+- **Admin reads**: API (sinds 6D-1); geen Supabase-reads meer.
+- **Admin writes**: alle admin-mutaties gaan via de typed laag `src/lib/api/admin-writes.ts` en de bestaande client (`postAdmin`, `patchAdmin`, `putAdmin`, `deleteAdmin`, `postAdminForm`). De endpoints per onderdeel:
+
+  | Onderdeel                         | Endpoints                                                                      |
+  | --------------------------------- | ------------------------------------------------------------------------------ |
+  | Boekingen (agenda en reservaties) | `POST /api/admin/bookings`, `PATCH`/`DELETE /api/admin/bookings/:id`           |
+  | Beschikbaarheid                   | `GET /api/admin/availability`                                                  |
+  | Diensten                          | `POST /api/admin/services`, `PATCH`/`DELETE /api/admin/services/:id`           |
+  | Pakketinhoud                      | `PUT /api/admin/services/:id/package-content`                                  |
+  | Voertuigtypes                     | `POST /api/admin/vehicle-types`, `PATCH`/`DELETE /api/admin/vehicle-types/:id` |
+  | Prijsmatrix                       | `PUT /api/admin/vehicle-types/:id/pricing`                                     |
+  | Blokkades                         | `POST`/`DELETE /api/admin/blocked-periods`                                     |
+  | Instellingen                      | `PATCH /api/admin/settings` (partieel)                                         |
+  | Galerij                           | `PATCH`/`DELETE /api/admin/gallery/:id`                                        |
+  - Elke request wordt vóór verzending gevalideerd met de gedeelde backendcontracten. Die zijn verhuisd naar `packages/shared/src/admin-write.ts`; de backend re-exporteert ze.
+  - Prijs, duur, totalen, start/einde, cancel token en `cancelled_at` kunnen niet meegestuurd worden. **Server authoritative**: de UI toont de prijs uit de API-response.
+  - Customer e-mail is **verplicht**; er is geen placeholder meer.
+  - Er is geen vrije duur, prijs of dienstnaam meer.
+  - Admin-beschikbaarheid komt van de server: de admin gebruikt `src/lib/slots.ts` niet meer. Die blijft tijdelijk alleen voor de publieke `/reservatie`.
+
+- **Gallery uploads**:
+  - Uploaden gaat via `POST /api/admin/gallery/upload` (multipart) naar de self-hosted storage.
+  - Verwijderen gaat via `DELETE /api/admin/gallery/:id`; de server beslist over het bestand.
+  - Geen `supabase.storage` meer in de admin.
+- **Auth0**: ongewijzigd (bestaande provider, access token via `getAccessTokenSilently`, `admin:access`).
+- **Remaining Supabase**:
+  - Admin: database-reads, database-writes, storage en auth: alle **NONE**.
+  - Publiek: `src/routes/{diensten,galerij,reservatie}.tsx`, `src/components/{ServicesPreview,RealisationsPreview,Testimonials}.tsx`, `src/lib/slots.ts`, `src/integrations/supabase/`.
+- **Tests**:
+  - Root: **111 tests, allemaal geslaagd** (was 67). Nieuw: 28 write-flow-tests, 6 voor het boekingsformulier/e-mail, 4 mutation-tests en 6 extra clienttests (POST/PATCH/PUT/DELETE/multipart, 422, timeout).
+  - `apps/api`: 226 tests, waarvan 225 geslaagd en 1 overgeslagen.
+  - Componenten zijn niet gerenderd getest (geen DOM-testomgeving); daarvoor is er een handmatige checklist met 24 stappen. Die is in deze fase **niet** in een browser uitgevoerd, omdat er geen Auth0-credentials of draaiende API met data beschikbaar waren.
+- **Lint**: 0 nieuwe problemen. Totaal 949 (baseline 1.003 na 6D-1; oorspronkelijk 1.009). Geen enkel gewijzigd bestand heeft meer meldingen dan op HEAD.
+
+**Next phase: "Remove Supabase from the admin/application path"**
 
 ## Current architecture
 

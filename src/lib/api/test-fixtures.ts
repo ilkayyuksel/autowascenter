@@ -18,18 +18,28 @@ export interface RecordedCall {
   url: string;
   method: string;
   headers: Headers;
+  /** Raw body as passed to fetch (JSON string or FormData). */
+  body: unknown;
+  /** Parsed JSON body, if it was a JSON string. */
+  json: unknown;
 }
 
-/** fetch double: records every call and answers with `respond(url)`. */
-export function fakeFetch(respond: (url: string) => Response | Promise<Response>) {
+/** fetch double: records every call and answers with `respond(url, call)`. */
+export function fakeFetch(
+  respond: (url: string, call: RecordedCall) => Response | Promise<Response>,
+) {
   const calls: RecordedCall[] = [];
   const impl = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push({
+    const body = init?.body;
+    const call: RecordedCall = {
       url: String(input),
       method: init?.method ?? "GET",
       headers: new Headers(init?.headers),
-    });
-    return respond(String(input));
+      body,
+      json: typeof body === "string" ? JSON.parse(body) : undefined,
+    };
+    calls.push(call);
+    return respond(String(input), call);
   }) as typeof fetch;
   return { impl, calls };
 }

@@ -2,11 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Save, Settings as SettingsIcon } from "lucide-react";
-// WRITE side (save) still uses Supabase until phase 6D-2.
-import { supabase } from "@/integrations/supabase/client";
+// Reads and writes through the API: GET/PATCH /api/admin/settings (partial update).
 import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { useAdminMutation } from "@/hooks/useAdminMutation";
 import { AdminLoadError } from "@/components/admin/AdminLoadError";
-import { loadSettings, type SettingsForm } from "@/lib/api/admin-reads";
+import { loadSettings, toSettingsForm, type SettingsForm } from "@/lib/api/admin-reads";
+import { changedFields, updateSettings } from "@/lib/api/admin-writes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,11 +21,21 @@ type Settings = SettingsForm;
 
 function AdminSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  // Last state confirmed by the API: only fields that differ from it are sent.
+  const [saved, setSaved] = useState<Settings | null>(null);
+  const { mutate, pending } = useAdminMutation();
 
   const { api, state, run } = useAdminLoad();
 
   const load = useCallback(
-    () => run((signal) => loadSettings(api, { signal }), setSettings),
+    () =>
+      run(
+        (signal) => loadSettings(api, { signal }),
+        (data) => {
+          setSettings(data);
+          setSaved(data);
+        },
+      ),
     [api, run],
   );
 
@@ -36,22 +47,20 @@ function AdminSettingsPage() {
   if (state.status === "error") return <AdminLoadError error={state.error} onRetry={load} />;
   if (!settings) return <p className="text-muted-foreground">Laden...</p>;
 
+  // PATCH only the changed settings; the server merges them with the stored row and
+  // validates the result (e.g. opening before closing hour).
   const save = async () => {
-    const { error } = await supabase
-      .from("site_settings")
-      .update({
-        km_fee: settings.km_fee,
-        free_km: settings.free_km,
-        base_address: settings.base_address,
-        base_city: settings.base_city,
-        opening_hour: settings.opening_hour,
-        closing_hour: settings.closing_hour,
-        slot_interval_minutes: settings.slot_interval_minutes,
-        notification_email: settings.notification_email,
-      })
-      .eq("id", settings.id);
-    if (error) return toast.error(error.message);
-    toast.success("Opgeslagen");
+    const { id: _id, ...patch } = saved ? changedFields(saved, settings) : settings;
+    if (Object.keys(patch).length === 0) return toast.info("Geen wijzigingen");
+    const result = await mutate((api) => updateSettings(api, patch), {
+      success: "Opgeslagen",
+      onStale: load,
+    });
+    if (result) {
+      const form = toSettingsForm(result);
+      setSettings(form);
+      setSaved(form);
+    }
   };
 
   return (
@@ -128,7 +137,7 @@ function AdminSettingsPage() {
           />
         </div>
 
-        <Button onClick={save} className="w-full bg-gradient-primary">
+        <Button onClick={save} disabled={pending} className="w-full bg-gradient-primary">
           <Save className="h-4 w-4" /> Opslaan
         </Button>
       </div>

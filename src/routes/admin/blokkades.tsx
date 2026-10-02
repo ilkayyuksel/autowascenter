@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, CalendarX } from "lucide-react";
-// WRITE side (create, delete) still uses Supabase until phase 6D-2.
-import { supabase } from "@/integrations/supabase/client";
+// Reads and writes through the API: GET/POST/DELETE /api/admin/blocked-periods.
 import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { useAdminMutation } from "@/hooks/useAdminMutation";
+import { createBlockedPeriod, deleteBlockedPeriod } from "@/lib/api/admin-writes";
 import { AdminLoadError } from "@/components/admin/AdminLoadError";
 import { loadBlockedPeriods, type BlockedPeriodItem } from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ function AdminBlockedPage() {
   });
 
   const { api, state, run } = useAdminLoad();
+  const { mutate } = useAdminMutation();
 
   const refresh = useCallback(
     () => run((signal) => loadBlockedPeriods(api, { signal }), setPeriods),
@@ -44,22 +46,26 @@ function AdminBlockedPage() {
       toast.error("Vul start- en einddatum in");
       return;
     }
-    const { error } = await supabase.from("blocked_periods").insert({
-      start_date: form.start_date,
-      end_date: form.end_date,
-      start_time: form.start_time || null,
-      end_time: form.end_time || null,
-      reason: form.reason || null,
-    });
-    if (error) return toast.error(error.message);
+    // The server validates the date range, the time range and "whole day" (no times).
+    const created = await mutate(
+      (api) =>
+        createBlockedPeriod(api, {
+          start_date: form.start_date,
+          end_date: form.end_date,
+          start_time: form.start_time || null,
+          end_time: form.end_time || null,
+          reason: form.reason || null,
+        }),
+      { success: "Toegevoegd" },
+    );
+    if (!created) return;
     setForm({ start_date: "", end_date: "", start_time: "", end_time: "", reason: "" });
-    toast.success("Toegevoegd");
     refresh();
   };
 
   const remove = async (id: string) => {
     if (!confirm("Verwijderen?")) return;
-    await supabase.from("blocked_periods").delete().eq("id", id);
+    await mutate((api) => deleteBlockedPeriod(api, id).then(() => true), { success: "Verwijderd" });
     refresh();
   };
 

@@ -1,10 +1,14 @@
 // Central, typed client for the self-hosted API (VITE_API_BASE_URL). The only place in the
 // frontend that calls fetch() for the API.
 //
-// - get():      public endpoints, never sends a token.
-// - getAdmin(): /api/admin/* endpoints; asks the injected getAccessToken (Auth0
-//               getAccessTokenSilently) for an ACCESS token and sends it as a Bearer header.
-//               The client never stores or refreshes tokens itself.
+// - get():       public endpoints, never sends a token.
+// - getAdmin(), postAdmin(), patchAdmin(), putAdmin(), deleteAdmin(), postAdminForm():
+//                /api/admin/* endpoints; ask the injected getAccessToken (Auth0
+//                getAccessTokenSilently) for an ACCESS token and send it as a Bearer header.
+//                The client never stores or refreshes tokens itself.
+// - JSON bodies are sent as application/json; postAdminForm() sends multipart FormData (the
+//   browser sets the boundary). Request bodies are validated by the callers
+//   (src/lib/api/admin-writes.ts) with the shared Zod contracts before they get here.
 // - Every failure becomes an ApiError { status, code, message }; the raw backend response
 //   never reaches the UI. Responses are validated at runtime with the shared Zod contracts.
 // - Requests always settle (timeout), so no page can keep loading forever.
@@ -21,6 +25,8 @@ export interface ResponseSchema<T> {
 export const CLIENT_ERROR = {
   NETWORK: "NETWORK_ERROR",
   TIMEOUT: "TIMEOUT",
+  /** A request body failed the shared Zod contract before it was sent (nothing was sent). */
+  VALIDATION: "CLIENT_VALIDATION_ERROR",
   /** Cancelled by the caller (e.g. the page was left); not shown to the user. */
   ABORTED: "ABORTED",
   INVALID_RESPONSE: "INVALID_RESPONSE",
@@ -50,6 +56,8 @@ export type Query = Record<string, QueryValue | readonly QueryValue[]>;
 export interface RequestOptions {
   query?: Query;
   signal?: AbortSignal;
+  /** Overrides the client's timeout for this request (e.g. uploads). */
+  timeoutMs?: number;
 }
 
 export interface ApiClientOptions {
@@ -64,7 +72,37 @@ export interface ApiClientOptions {
 export interface ApiClient {
   get<T>(path: string, schema: ResponseSchema<T>, options?: RequestOptions): Promise<T>;
   getAdmin<T>(path: string, schema: ResponseSchema<T>, options?: RequestOptions): Promise<T>;
+  postAdmin<T>(
+    path: string,
+    body: unknown,
+    schema: ResponseSchema<T>,
+    options?: RequestOptions,
+  ): Promise<T>;
+  patchAdmin<T>(
+    path: string,
+    body: unknown,
+    schema: ResponseSchema<T>,
+    options?: RequestOptions,
+  ): Promise<T>;
+  putAdmin<T>(
+    path: string,
+    body: unknown,
+    schema: ResponseSchema<T>,
+    options?: RequestOptions,
+  ): Promise<T>;
+  /** DELETE; the API answers 204 without a body. */
+  deleteAdmin(path: string, options?: RequestOptions): Promise<void>;
+  /** multipart/form-data POST (gallery upload). */
+  postAdminForm<T>(
+    path: string,
+    form: FormData,
+    schema: ResponseSchema<T>,
+    options?: RequestOptions,
+  ): Promise<T>;
 }
+
+type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+type Body = { kind: "json"; value: unknown } | { kind: "form"; value: FormData } | null;
 
 export const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -111,28 +149,38 @@ export function createApiClient({
   }
 
   async function request<T>(
+    method: Method,
     path: string,
-    schema: ResponseSchema<T>,
-    { query, signal }: RequestOptions,
+    body: Body,
+    schema: ResponseSchema<T> | null,
+    { query, signal, timeoutMs: requestTimeoutMs }: RequestOptions,
     token: string | null,
   ): Promise<T> {
     const headers = new Headers({ Accept: "application/json" });
     if (token) headers.set("Authorization", `Bearer ${token}`);
+    let payload: BodyInit | undefined;
+    if (body?.kind === "json") {
+      headers.set("Content-Type", "application/json");
+      payload = JSON.stringify(body.value);
+    } else if (body?.kind === "form") {
+      payload = body.value; // Content-Type with boundary is set by fetch
+    }
 
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, timeoutMs);
+    }, requestTimeoutMs ?? timeoutMs);
     const onAbort = () => controller.abort();
     signal?.addEventListener("abort", onAbort, { once: true });
 
     let response: Response;
     try {
       response = await fetchImpl(buildUrl(baseUrl, path, query), {
-        method: "GET",
+        method,
         headers,
+        body: payload,
         signal: controller.signal,
       });
     } catch {
@@ -146,9 +194,12 @@ export function createApiClient({
       signal?.removeEventListener("abort", onAbort);
     }
 
-    let body: unknown;
+    // 204 No Content (DELETE): nothing to parse.
+    if (schema === null && response.status === 204) return undefined as T;
+
+    let json: unknown;
     try {
-      body = await response.json();
+      json = await response.json();
     } catch {
       if (!response.ok) {
         throw new ApiError(response.status, `HTTP_${response.status}`, "Request failed.");
@@ -159,9 +210,10 @@ export function createApiClient({
         "Malformed server response.",
       );
     }
-    if (!response.ok) throw errorFromBody(response.status, body);
+    if (!response.ok) throw errorFromBody(response.status, json);
+    if (schema === null) return undefined as T;
 
-    const parsed = schema.safeParse(body);
+    const parsed = schema.safeParse(json);
     if (!parsed.success) {
       throw new ApiError(
         response.status,
@@ -173,8 +225,18 @@ export function createApiClient({
   }
 
   return {
-    get: (path, schema, options = {}) => request(path, schema, options, null),
+    get: (path, schema, options = {}) => request("GET", path, null, schema, options, null),
     getAdmin: async (path, schema, options = {}) =>
-      request(path, schema, options, await accessToken()),
+      request("GET", path, null, schema, options, await accessToken()),
+    postAdmin: async (path, body, schema, options = {}) =>
+      request("POST", path, { kind: "json", value: body }, schema, options, await accessToken()),
+    patchAdmin: async (path, body, schema, options = {}) =>
+      request("PATCH", path, { kind: "json", value: body }, schema, options, await accessToken()),
+    putAdmin: async (path, body, schema, options = {}) =>
+      request("PUT", path, { kind: "json", value: body }, schema, options, await accessToken()),
+    deleteAdmin: async (path, options = {}) =>
+      request<void>("DELETE", path, null, null, options, await accessToken()),
+    postAdminForm: async (path, form, schema, options = {}) =>
+      request("POST", path, { kind: "form", value: form }, schema, options, await accessToken()),
   };
 }
