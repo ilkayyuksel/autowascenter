@@ -1,8 +1,10 @@
 import { createFileRoute, Outlet, Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { ShieldAlert } from "lucide-react";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { AdminApiProvider } from "@/components/admin/AdminApiProvider";
+import { shouldRecheckSession } from "@/lib/api/errors";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/admin")({
@@ -19,6 +21,17 @@ function AdminGuard() {
   const { state, login, logout, retry } = useAdminAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  // A 401 from an admin page's API call: re-check the session via /api/admin/me, which then
+  // shows "Opnieuw inloggen" below. At most once per 30 s, so a 401 can never cause a loop.
+  const lastRecheck = useRef<number | null>(null);
+  const onUnauthorized = useCallback(() => {
+    const now = Date.now();
+    if (!shouldRecheckSession(lastRecheck.current, now)) return;
+    lastRecheck.current = now;
+    retry();
+  }, [retry]);
+  const loginHere = useCallback(() => login(pathname), [login, pathname]);
 
   useEffect(() => {
     if (state.status === "unauthenticated") {
@@ -83,9 +96,11 @@ function AdminGuard() {
 
     case "authorized":
       return (
-        <AdminLayout>
-          <Outlet />
-        </AdminLayout>
+        <AdminApiProvider onUnauthorized={onUnauthorized} login={loginHere}>
+          <AdminLayout>
+            <Outlet />
+          </AdminLayout>
+        </AdminApiProvider>
       );
   }
 }

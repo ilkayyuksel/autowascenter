@@ -14,7 +14,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 6A: admin-API read-side                       | **Afgerond** (zie _Phase 6A_); frontend nog niet aangesloten                   |
 | Fase 6B: admin-API write-side                      | **Afgerond** (zie _Phase 6B_); frontend nog niet aangesloten                   |
 | Fase 6C: gallery storage (self-hosted)             | **Afgerond** (zie _Phase 6C_); frontend en bestaande bestanden niet gemigreerd |
-| Volgende fase                                      | **Admin frontend migration from Supabase to own API** (6D)                     |
+| Fase 6D-1: admin-frontend READ-migratie            | **Afgerond** (zie _Phase 6D-1_); admin-writes nog via Supabase                 |
+| Volgende fase                                      | **Admin frontend WRITE migration** (6D-2)                                      |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
@@ -184,6 +185,46 @@ Specificatie: `docs/GALLERY-STORAGE-MIGRATION.md`; endpoints: `docs/ADMIN-API.md
 - **Docker**: **NOT IMPLEMENTED**; de benodigde volume-mount is gedocumenteerd (_Future Docker volume_).
 
 **Next phase: "Admin frontend migration from Supabase to own API"**
+
+## Phase 6D-1 — Admin frontend READ migration
+
+**Status: COMPLETE**
+
+Details: `docs/ADMIN-FRONTEND-MIGRATION.md`.
+
+- **API client**: `src/lib/api/client.ts` is de enige plek waar de frontend de API aanroept.
+  - `get()` is publiek en stuurt geen token.
+  - `getAdmin()` voegt `Authorization: Bearer <access token>` toe via de bestaande Auth0-`getAccessTokenSilently`. Er is geen tweede provider en de client slaat geen tokens op.
+  - Fouten worden een typed `ApiError` (`status`, `code`, `message`).
+  - Elke response wordt runtime gevalideerd met dezelfde Zod-contracten als de backend. Die contracten zijn verhuisd naar `packages/shared/src/admin.ts`; de backend re-exporteert ze.
+  - Elke request heeft een timeout.
+- **Migrated pages** (READ = API, geen Supabase-read of fallback meer):
+  - dashboard (`GET /api/admin/dashboard`);
+  - agenda (`GET /api/admin/agenda`, plus `GET /api/admin/vehicle-types` voor het aanmaakformulier);
+  - reservaties (`GET /api/admin/bookings` met server-side paginering, en `GET /api/admin/bookings/:id` voor het detail);
+  - diensten (`GET /api/admin/services`);
+  - voertuigen (`GET /api/admin/vehicle-types`);
+  - blokkades (`GET /api/admin/blocked-periods`);
+  - instellingen (`GET /api/admin/settings`);
+  - galerij (`GET /api/admin/gallery`).
+  - `reviews.tsx` is ongewijzigd (alleen een redirect).
+- **Foutafhandeling**:
+  - Een 401 laat de bestaande guard de sessie opnieuw controleren ("Opnieuw inloggen"), maximaal één keer per 30 s.
+  - 403 toont "Geen toegang".
+  - 503, netwerkfouten en timeouts tonen een tijdelijke fout met "Opnieuw proberen".
+  - `SETTINGS_NOT_CONFIGURED` toont een configuratiefout.
+  - Geen enkele pagina blijft eindeloos laden.
+- **Remaining Supabase writes**: alle admin-writes blijven op Supabase. Dat geldt voor agenda, reservaties, diensten, voertuigen, blokkades, instellingen en galerij, inclusief de storage-upload.
+  - Ook de slot-controle vóór het opslaan in de agenda-dialogen (`fetchSlotData`) blijft op Supabase. Die hoort bij de write-flow en verhuist in 6D-2 naar `GET /api/admin/availability`.
+  - Sinds Fase 5 weigert Supabase-RLS deze writes, omdat er geen Supabase-sessie meer is. Opslaan werkt dus pas na 6D-2. Deze branch mag in deze toestand niet gedeployed worden.
+- **Tests**: root `npm test` telt nu **67 tests, allemaal geslaagd**: 11 bestaande en 56 nieuwe.
+  - De nieuwe tests dekken de client (12), de foutweergave (8), de load-states (8) en de loaders per pagina (28).
+  - De React-componenten zelf worden niet gerenderd in tests, omdat er geen DOM-testomgeving is. Daarvoor is er een handmatige checklist.
+  - `apps/api` is ongewijzigd: 226 tests, waarvan 225 geslaagd en 1 overgeslagen.
+- **Public frontend status**: **UNCHANGED**; de publieke pagina's gebruiken nog Supabase.
+- **Lint**: 0 nieuwe problemen. In de gewijzigde pagina's daalt het aantal bestaande meldingen licht, onder meer doordat de `as any` in `agenda.tsx` verdwenen is.
+
+**Next phase: "Admin frontend WRITE migration"**
 
 ## Current architecture
 

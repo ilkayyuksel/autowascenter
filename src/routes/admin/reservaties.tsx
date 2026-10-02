@@ -1,10 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { useCallback, useEffect, useState } from "react";
+import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Phone, Mail, Trash2, MapPin, Euro, Clock, Plus, Eye } from "lucide-react";
+import { Phone, Mail, Trash2, MapPin, Euro, Clock, Plus, Eye, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+// WRITE side (status change, delete, create) still uses Supabase until phase 6D-2.
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import {
+  loadBookingDetail,
+  loadBookingsPage,
+  type BookingDetailView,
+  type BookingRow,
+} from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,30 +25,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-type Booking = {
-  id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  vehicle_info: string | null;
-  vehicle_brand: string | null;
-  vehicle_model: string | null;
-  service_title: string | null;
-  preferred_date: string;
-  preferred_time: string;
-  end_time: string | null;
-  total_duration_minutes: number;
-  total_price: number;
-  on_location: boolean;
-  location_in_sint_niklaas: boolean | null;
-  location_address: string | null;
-  location_fee: number;
-  company_name: string | null;
-  vat_number: string | null;
-  notes: string | null;
-  status: "nieuw" | "bevestigd" | "voltooid" | "geannuleerd";
-  created_at: string;
-};
+// READ model from GET /api/admin/bookings (paginated, newest date first).
+type Booking = BookingRow;
 
 const STATUS_LABEL: Record<Booking["status"], string> = {
   nieuw: "Nieuw",
@@ -61,20 +48,27 @@ export const Route = createFileRoute("/admin/reservaties")({
 
 function BookingsAdmin() {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Server-side pagination: the API is authoritative for page, limit, total, total_pages.
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const { api, state, run } = useAdminLoad();
+  const loading = state.status === "loading";
 
-  const load = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from("bookings")
-      .select("*")
-      .order("preferred_date", { ascending: false })
-      .order("preferred_time", { ascending: false });
-    setBookings((data as Booking[]) ?? []);
-    setLoading(false);
-  };
+  const load = useCallback(
+    () =>
+      run(
+        (signal) => loadBookingsPage(api, { page }, { signal }),
+        ({ items, meta }) => {
+          setBookings(items);
+          setTotalPages(meta.total_pages);
+          setTotal(meta.total);
+        },
+      ),
+    [api, run, page],
+  );
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const updateStatus = async (id: string, status: Booking["status"]) => {
     const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
@@ -92,7 +86,7 @@ function BookingsAdmin() {
   };
 
   const [openNew, setOpenNew] = useState(false);
-  const [detail, setDetail] = useState<Booking | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const emptyForm = {
     customer_name: "", customer_email: "", customer_phone: "",
     vehicle_brand: "", vehicle_model: "",
@@ -140,7 +134,8 @@ function BookingsAdmin() {
 
       <div className="mt-8 space-y-3">
         {loading && <div className="text-sm text-muted-foreground">Laden...</div>}
-        {!loading && bookings.length === 0 && (
+        {state.status === "error" && <AdminLoadError error={state.error} onRetry={load} />}
+        {state.status === "success" && bookings.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">
             Nog geen reservaties.
           </div>
@@ -156,7 +151,7 @@ function BookingsAdmin() {
                   </span>
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  {format(new Date(b.preferred_date), "EEEE d MMMM yyyy", { locale: nl })} • {b.preferred_time}
+                  {format(parseISO(b.preferred_date), "EEEE d MMMM yyyy", { locale: nl })} • {b.preferred_time}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -168,7 +163,7 @@ function BookingsAdmin() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="ghost" size="icon" onClick={() => setDetail(b)}>
+                <Button variant="ghost" size="icon" onClick={() => setDetailId(b.id)}>
                   <Eye className="h-4 w-4" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={() => remove(b.id)} className="text-destructive hover:text-destructive">
@@ -193,7 +188,7 @@ function BookingsAdmin() {
               <div className="inline-flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 {b.total_duration_minutes} min
-                {b.end_time && <span className="text-muted-foreground">→ {b.end_time}</span>}
+                <span className="text-muted-foreground">→ {b.pickup_label}</span>
               </div>
               <div className="inline-flex items-center gap-2 font-semibold">
                 <Euro className="h-4 w-4 text-muted-foreground" />
@@ -236,6 +231,32 @@ function BookingsAdmin() {
           </div>
         ))}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">
+            Pagina {page} van {totalPages} · {total} reservaties
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="h-4 w-4" /> Vorige
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || loading}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Volgende <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* New booking dialog */}
       <Dialog open={openNew} onOpenChange={setOpenNew}>
@@ -304,50 +325,85 @@ function BookingsAdmin() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail dialog */}
-      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
-        <DialogContent className="max-w-lg">
-          {detail && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{detail.customer_name}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs uppercase text-muted-foreground">Datum</div>
-                    <div className="font-medium">{format(new Date(detail.preferred_date), "EEE d MMM yyyy", { locale: nl })}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase text-muted-foreground">Uur</div>
-                    <div className="font-medium">{detail.preferred_time}{detail.end_time ? ` – ${detail.end_time}` : ""}</div>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">Dienst</div>
-                  <div className="font-medium">{detail.service_title ?? "—"}</div>
-                </div>
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">Wagen</div>
-                  <div className="font-medium">
-                    {detail.vehicle_brand || detail.vehicle_model
-                      ? `${detail.vehicle_brand ?? ""} ${detail.vehicle_model ?? ""}`.trim()
-                      : (detail.vehicle_info ?? "—")}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <a href={`tel:${detail.customer_phone}`} className="text-primary hover:underline">{detail.customer_phone}</a>
-                  <a href={`mailto:${detail.customer_email}`} className="text-primary hover:underline truncate">{detail.customer_email}</a>
-                </div>
-                <div className="font-semibold text-lg">€{Number(detail.total_price).toFixed(2)}</div>
-                {detail.notes && (
-                  <div className="p-3 rounded-lg bg-muted text-muted-foreground">{detail.notes}</div>
-                )}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Detail dialog: GET /api/admin/bookings/:id (no Supabase fallback) */}
+      {detailId && <BookingDetailDialog id={detailId} onClose={() => setDetailId(null)} />}
     </div>
+  );
+}
+
+function BookingDetailDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const { api, state, run } = useAdminLoad();
+  const [detail, setDetail] = useState<BookingDetailView | null>(null);
+
+  const load = useCallback(
+    () => run((signal) => loadBookingDetail(api, id, { signal }), setDetail),
+    [api, run, id],
+  );
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        {state.status === "loading" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Reservatie</DialogTitle>
+            </DialogHeader>
+            <div className="text-sm text-muted-foreground">Laden...</div>
+          </>
+        )}
+        {state.status === "error" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Reservatie</DialogTitle>
+            </DialogHeader>
+            <AdminLoadError error={state.error} onRetry={load} />
+          </>
+        )}
+        {state.status === "success" && detail && (
+          <>
+            <DialogHeader>
+              <DialogTitle>{detail.customer_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Datum</div>
+                  <div className="font-medium">{format(parseISO(detail.preferred_date), "EEE d MMM yyyy", { locale: nl })}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Uur</div>
+                  <div className="font-medium">{detail.preferred_time} – {detail.pickup_label}</div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Dienst</div>
+                <div className="font-medium">
+                  {detail.lines.length > 0
+                    ? detail.lines.map((l) => l.service_title).join(", ")
+                    : (detail.service_title ?? "—")}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Wagen</div>
+                <div className="font-medium">
+                  {detail.vehicle_brand || detail.vehicle_model
+                    ? `${detail.vehicle_brand ?? ""} ${detail.vehicle_model ?? ""}`.trim()
+                    : (detail.vehicle_info ?? "—")}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <a href={`tel:${detail.customer_phone}`} className="text-primary hover:underline">{detail.customer_phone}</a>
+                <a href={`mailto:${detail.customer_email}`} className="text-primary hover:underline truncate">{detail.customer_email}</a>
+              </div>
+              <div className="font-semibold text-lg">€{Number(detail.total_price).toFixed(2)}</div>
+              {detail.notes && (
+                <div className="p-3 rounded-lg bg-muted text-muted-foreground">{detail.notes}</div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

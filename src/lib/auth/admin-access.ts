@@ -27,6 +27,12 @@ const LOGIN_REQUIRED_ERRORS = new Set([
   "invalid_grant",
 ]);
 
+/** True for Auth0 SDK token errors that mean "log in again" (not a transient failure). */
+export function isLoginRequiredError(error: unknown): boolean {
+  const code = (error as { error?: unknown } | null)?.error;
+  return typeof code === "string" && LOGIN_REQUIRED_ERRORS.has(code);
+}
+
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /** Adds `Authorization: Bearer <access token>` to request headers. */
@@ -66,10 +72,7 @@ export async function fetchAdminAccess(
     accessToken = await getAccessToken();
     if (!accessToken) return { status: "reauth" };
   } catch (error) {
-    const code = (error as { error?: unknown })?.error;
-    return typeof code === "string" && LOGIN_REQUIRED_ERRORS.has(code)
-      ? { status: "reauth" }
-      : { status: "error" };
+    return isLoginRequiredError(error) ? { status: "reauth" } : { status: "error" };
   }
 
   let response: Response;

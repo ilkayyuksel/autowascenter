@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Save, Settings as SettingsIcon } from "lucide-react";
+// WRITE side (save) still uses Supabase until phase 6D-2.
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import { loadSettings, type SettingsForm } from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,27 +15,25 @@ export const Route = createFileRoute("/admin/instellingen")({
   component: AdminSettingsPage,
 });
 
-type Settings = {
-  id: string;
-  km_fee: number;
-  free_km: number;
-  base_address: string;
-  base_city: string;
-  opening_hour: string;
-  closing_hour: string;
-  slot_interval_minutes: number;
-  notification_email: string | null;
-};
+// READ model from GET /api/admin/settings (one object; no client-side defaults).
+type Settings = SettingsForm;
 
 function AdminSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
 
-  useEffect(() => {
-    supabase.from("site_settings").select("*").limit(1).single().then(({ data }) => {
-      if (data) setSettings(data as Settings);
-    });
-  }, []);
+  const { api, state, run } = useAdminLoad();
 
+  const load = useCallback(
+    () => run((signal) => loadSettings(api, { signal }), setSettings),
+    [api, run],
+  );
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // 500 SETTINGS_NOT_CONFIGURED is shown as a configuration error (not retryable).
+  if (state.status === "error") return <AdminLoadError error={state.error} onRetry={load} />;
   if (!settings) return <p className="text-muted-foreground">Laden...</p>;
 
   const save = async () => {

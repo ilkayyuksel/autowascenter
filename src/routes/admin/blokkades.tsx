@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, CalendarX } from "lucide-react";
+// WRITE side (create, delete) still uses Supabase until phase 6D-2.
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import { loadBlockedPeriods, type BlockedPeriodItem } from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,14 +15,8 @@ export const Route = createFileRoute("/admin/blokkades")({
   component: AdminBlockedPage,
 });
 
-type BlockedPeriod = {
-  id: string;
-  start_date: string;
-  end_date: string;
-  start_time: string | null;
-  end_time: string | null;
-  reason: string | null;
-};
+// READ model from GET /api/admin/blocked-periods (newest start date first).
+type BlockedPeriod = BlockedPeriodItem;
 
 function AdminBlockedPage() {
   const [periods, setPeriods] = useState<BlockedPeriod[]>([]);
@@ -30,17 +28,16 @@ function AdminBlockedPage() {
     reason: "",
   });
 
-  const refresh = async () => {
-    const { data } = await supabase
-      .from("blocked_periods")
-      .select("*")
-      .order("start_date", { ascending: false });
-    if (data) setPeriods(data as BlockedPeriod[]);
-  };
+  const { api, state, run } = useAdminLoad();
+
+  const refresh = useCallback(
+    () => run((signal) => loadBlockedPeriods(api, { signal }), setPeriods),
+    [api, run],
+  );
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   const add = async () => {
     if (!form.start_date || !form.end_date) {
@@ -100,7 +97,11 @@ function AdminBlockedPage() {
       </div>
 
       <div className="space-y-2">
-        {periods.length === 0 ? (
+        {state.status === "error" ? (
+          <AdminLoadError error={state.error} onRetry={refresh} />
+        ) : state.status === "loading" && periods.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Laden...</p>
+        ) : periods.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">Geen geblokkeerde periodes.</p>
         ) : (
           periods.map((p) => (

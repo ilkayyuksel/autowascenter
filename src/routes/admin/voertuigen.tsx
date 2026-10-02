@@ -1,8 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, Save } from "lucide-react";
+// WRITE side (create, update, delete, pricing save) still uses Supabase until phase 6D-2.
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import {
+  loadVehiclesPage,
+  type PricingRow,
+  type PricingService,
+  type VehicleTypeItem,
+} from "@/lib/api/admin-reads";
 import { getVehicleIcon } from "@/lib/vehicleIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,26 +23,10 @@ export const Route = createFileRoute("/admin/voertuigen")({
   component: AdminVehiclesPage,
 });
 
-type VehicleType = {
-  id: string;
-  slug: string;
-  title: string;
-  description: string | null;
-  image_url: string | null;
-  sort_order: number;
-  active: boolean;
-};
-
-type Service = { id: string; title: string; bookable: boolean; kind: string };
-
-type Vts = {
-  id: string;
-  vehicle_type_id: string;
-  service_id: string;
-  available: boolean;
-  price: number;
-  duration_minutes: number;
-};
+// READ models from GET /api/admin/vehicle-types (types + full pricing matrix in one call).
+type VehicleType = VehicleTypeItem;
+type Service = PricingService;
+type Vts = PricingRow;
 
 function AdminVehiclesPage() {
   const [vts, setVts] = useState<Vts[]>([]);
@@ -41,20 +34,24 @@ function AdminVehiclesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
 
-  const refresh = async () => {
-    const [v, s, m] = await Promise.all([
-      supabase.from("vehicle_types").select("*").order("sort_order"),
-      supabase.from("services").select("id,title,bookable,kind").eq("active", true).eq("bookable", true).order("title"),
-      supabase.from("vehicle_type_services").select("*"),
-    ]);
-    if (v.data) setVehicles(v.data as VehicleType[]);
-    if (s.data) setServices(s.data as Service[]);
-    if (m.data) setVts(m.data as Vts[]);
-  };
+  const { api, state, run } = useAdminLoad();
+
+  const refresh = useCallback(
+    () =>
+      run(
+        (signal) => loadVehiclesPage(api, { signal }),
+        (data) => {
+          setVehicles(data.vehicles);
+          setServices(data.services);
+          setVts(data.vts);
+        },
+      ),
+    [api, run],
+  );
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   const addVehicle = async () => {
     const slug = `nieuw-${Date.now()}`;
@@ -118,6 +115,18 @@ function AdminVehiclesPage() {
           <Plus className="h-4 w-4" /> Nieuw voertuigtype
         </Button>
       </div>
+
+      {state.status === "loading" && vehicles.length === 0 && (
+        <p className="text-sm text-muted-foreground">Laden...</p>
+      )}
+      {state.status === "error" && (
+        <div className="mb-6">
+          <AdminLoadError error={state.error} onRetry={refresh} />
+        </div>
+      )}
+      {state.status === "success" && vehicles.length === 0 && (
+        <p className="text-sm text-muted-foreground italic">Nog geen voertuigtypes.</p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {vehicles.map((v) => {

@@ -1,81 +1,63 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar, Sparkles, Euro, TrendingUp, Clock, ArrowRight, Image as ImageIcon } from "lucide-react";
-import { addDays, format, startOfWeek, isSameDay } from "date-fns";
+import { addDays, format, startOfWeek, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import { loadDashboard, type DashboardView } from "@/lib/api/admin-reads";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminHome,
 });
 
-type Booking = {
-  id: string;
-  customer_name: string;
-  service_title: string | null;
-  preferred_date: string;
-  preferred_time: string;
-  total_price: number;
-  status: "nieuw" | "bevestigd" | "voltooid" | "geannuleerd";
-};
-
+// READ: GET /api/admin/dashboard (week, counts, revenue and next appointment are computed by
+// the API in Europe/Brussels time). This page has no writes.
 function AdminHome() {
-  const [stats, setStats] = useState({ services: 0, gallery: 0, vehicles: 0 });
-  const [weekBookings, setWeekBookings] = useState<Booking[]>([]);
+  const { api, state, run } = useAdminLoad();
+  const [data, setData] = useState<DashboardView | null>(null);
 
-  const weekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
-  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
-
+  const load = useCallback(
+    () => run((signal) => loadDashboard(api, { signal }), setData),
+    [api, run],
+  );
   useEffect(() => {
-    (async () => {
-      const fromStr = format(weekStart, "yyyy-MM-dd");
-      const toStr = format(weekEnd, "yyyy-MM-dd");
-      const [s, g, vh, wb] = await Promise.all([
-        supabase.from("services").select("id", { count: "exact", head: true }).eq("active", true),
-        supabase.from("gallery_items").select("id", { count: "exact", head: true }),
-        supabase.from("vehicle_types").select("id", { count: "exact", head: true }).eq("active", true),
-        supabase
-          .from("bookings")
-          .select("id,customer_name,service_title,preferred_date,preferred_time,total_price,status")
-          .gte("preferred_date", fromStr)
-          .lte("preferred_date", toStr)
-          .neq("status", "geannuleerd")
-          .order("preferred_date")
-          .order("preferred_time"),
-      ]);
-      setStats({
-        services: s.count ?? 0,
-        gallery: g.count ?? 0,
-        vehicles: vh.count ?? 0,
-      });
-      setWeekBookings((wb.data as Booking[]) ?? []);
-    })();
-  }, [weekStart, weekEnd]);
+    load();
+  }, [load]);
 
-  const today = new Date();
-  const todayStr = format(today, "yyyy-MM-dd");
-  const todayBookings = weekBookings.filter((b) => b.preferred_date === todayStr);
-  const weekRevenue = weekBookings.reduce((sum, b) => sum + Number(b.total_price ?? 0), 0);
-  const upcoming = weekBookings.find((b) => {
-    const d = new Date(`${b.preferred_date}T${b.preferred_time}`);
-    return d >= today;
-  });
+  // Until the API answered: the current week as before (all values 0).
+  const fallbackWeekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
+  const weekStart = data ? parseISO(data.week_start) : fallbackWeekStart;
+  const weekEnd = data ? parseISO(data.week_end) : addDays(fallbackWeekStart, 6);
+  const todayStr = data?.today ?? format(new Date(), "yyyy-MM-dd");
+  const todayBookings = data?.today_bookings ?? [];
+  const weekRevenue = data?.week.revenue_excl_vat ?? 0;
+  const upcoming = data?.next_booking ?? null;
 
   // Revenue per day chart
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const dayRevenue = days.map((d) => {
     const dStr = format(d, "yyyy-MM-dd");
-    return weekBookings
-      .filter((b) => b.preferred_date === dStr)
-      .reduce((s, b) => s + Number(b.total_price ?? 0), 0);
+    return data?.week.days.find((x) => x.date === dStr)?.revenue_excl_vat ?? 0;
   });
   const maxRev = Math.max(...dayRevenue, 1);
 
+  if (state.status === "error") {
+    return (
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welkom terug 👋</h1>
+        <div className="mt-8">
+          <AdminLoadError error={state.error} onRetry={load} />
+        </div>
+      </div>
+    );
+  }
+
   const cards = [
-    { label: "Afspraken deze week", value: weekBookings.length, sub: `${todayBookings.length} vandaag`, icon: Calendar, accent: "text-primary" },
+    { label: "Afspraken deze week", value: data?.week.booking_count ?? 0, sub: `${todayBookings.length} vandaag`, icon: Calendar, accent: "text-primary" },
     { label: "Omzet deze week", value: `€${weekRevenue.toFixed(0)}`, sub: "geboekt", icon: Euro, accent: "text-[oklch(0.55_0.17_155)]" },
-    { label: "Diensten actief", value: stats.services, sub: "online zichtbaar", icon: Sparkles, accent: "text-primary" },
-    { label: "Galerij items", value: stats.gallery, sub: `${stats.vehicles} voertuigtypes`, icon: ImageIcon, accent: "text-amber-500" },
+    { label: "Diensten actief", value: data?.counts.active_services ?? 0, sub: "online zichtbaar", icon: Sparkles, accent: "text-primary" },
+    { label: "Galerij items", value: data?.counts.gallery_items ?? 0, sub: `${data?.counts.active_vehicle_types ?? 0} voertuigtypes`, icon: ImageIcon, accent: "text-amber-500" },
   ];
 
   return (
@@ -116,7 +98,7 @@ function AdminHome() {
           </div>
           <div className="mt-6 flex items-end gap-2 h-44">
             {days.map((d, i) => {
-              const isToday = isSameDay(d, today);
+              const isToday = format(d, "yyyy-MM-dd") === todayStr;
               const h = (dayRevenue[i] / maxRev) * 100;
               return (
                 <div key={d.toISOString()} className="flex-1 flex flex-col items-center gap-2">
@@ -145,7 +127,7 @@ function AdminHome() {
               <div className="mt-1 text-sm text-muted-foreground">{upcoming.service_title ?? "—"}</div>
               <div className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full">
                 <Calendar className="h-3.5 w-3.5" />
-                {format(new Date(upcoming.preferred_date), "EEE d MMM", { locale: nl })} • {upcoming.preferred_time}
+                {format(parseISO(upcoming.preferred_date), "EEE d MMM", { locale: nl })} • {upcoming.preferred_time}
               </div>
             </div>
           ) : (

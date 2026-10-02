@@ -1,19 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+// WRITE side (upload, save, delete) still uses Supabase until phase 6D-3.
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import { loadGallery, type GalleryItem } from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type Item = {
-  id: string;
-  title: string | null;
-  description: string | null;
-  image_url: string;
-  sort_order: number;
-};
+// READ model from GET /api/admin/gallery (ordered by sort_order).
+type Item = GalleryItem;
 
 export const Route = createFileRoute("/admin/galerij")({
   component: GalleryAdmin,
@@ -23,12 +22,14 @@ function GalleryAdmin() {
   const [items, setItems] = useState<Item[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  const load = async () => {
-    const { data } = await supabase.from("gallery_items").select("*").order("sort_order");
-    setItems((data as Item[]) ?? []);
-  };
+  const { api, state, run } = useAdminLoad();
 
-  useEffect(() => { load(); }, []);
+  const load = useCallback(
+    () => run((signal) => loadGallery(api, { signal }), setItems),
+    [api, run],
+  );
+
+  useEffect(() => { load(); }, [load]);
 
   const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -116,7 +117,15 @@ function GalleryAdmin() {
             </div>
           </div>
         ))}
-        {items.length === 0 && (
+        {state.status === "loading" && items.length === 0 && (
+          <div className="md:col-span-2 lg:col-span-3 text-sm text-muted-foreground">Laden...</div>
+        )}
+        {state.status === "error" && (
+          <div className="md:col-span-2 lg:col-span-3">
+            <AdminLoadError error={state.error} onRetry={load} />
+          </div>
+        )}
+        {state.status === "success" && items.length === 0 && (
           <div className="md:col-span-2 lg:col-span-3 rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">
             Nog geen afbeeldingen. Upload je eerste foto!
           </div>

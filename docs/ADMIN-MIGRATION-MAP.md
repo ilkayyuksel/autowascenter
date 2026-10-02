@@ -4,6 +4,7 @@ Every **read** query of the current admin frontend, and the new admin API endpoi
 
 - **Source of truth**: `src/routes/admin/*.tsx`, `src/routes/admin.tsx`, `src/components/admin/*`, `src/hooks/useAdminAuth.ts`.
 - The frontend is **not** migrated yet: it still calls Supabase. Write operations follow in phase 6B.
+- **Update phase 6D-1**: the admin frontend now uses these endpoints for all reads; see `docs/ADMIN-FRONTEND-MIGRATION.md`.
 
 All endpoints require an Auth0 access token with `admin:access` (see `docs/ADMIN-API.md`).
 

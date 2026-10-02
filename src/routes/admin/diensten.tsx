@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
+// WRITE side (create, save, package contents, delete) still uses Supabase until phase 6D-2.
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import { loadServices, type ServiceItem, type ServiceKind } from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,20 +14,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 
-type Kind = "dienst" | "extra" | "pakket";
-
-type Service = {
-  id: string;
-  title: string;
-  description: string | null;
-  icon: string | null;
-  category: string | null;
-  badge: string | null;
-  bookable: boolean;
-  sort_order: number;
-  active: boolean;
-  kind: Kind;
-};
+type Kind = ServiceKind;
+// READ model from GET /api/admin/services (package contents via included_service_ids).
+type Service = ServiceItem;
 
 const ICONS = ["sparkles", "spray-can", "car", "shield"];
 const KIND_LABELS: Record<Kind, string> = { pakket: "Pakketten", dienst: "Diensten", extra: "Extra diensten" };
@@ -36,18 +29,21 @@ function ServicesAdmin() {
   const [items, setItems] = useState<Service[]>([]);
   const [contents, setContents] = useState<Record<string, string[]>>({});
 
-  const load = async () => {
-    const [{ data }, { data: ps }] = await Promise.all([
-      supabase.from("services").select("*").order("sort_order"),
-      supabase.from("package_services").select("package_id,service_id"),
-    ]);
-    setItems((data as Service[]) ?? []);
-    const map: Record<string, string[]> = {};
-    (ps ?? []).forEach((r) => { (map[r.package_id] ??= []).push(r.service_id); });
-    setContents(map);
-  };
+  const { api, state, run } = useAdminLoad();
 
-  useEffect(() => { load(); }, []);
+  const load = useCallback(
+    () =>
+      run(
+        (signal) => loadServices(api, { signal }),
+        (data) => {
+          setItems(data.items);
+          setContents(data.contents);
+        },
+      ),
+    [api, run],
+  );
+
+  useEffect(() => { load(); }, [load]);
 
   const addNew = async (kind: Kind) => {
     const title = kind === "pakket" ? "Nieuw pakket" : kind === "extra" ? "Nieuwe extra dienst" : "Nieuwe dienst";
@@ -123,7 +119,14 @@ function ServicesAdmin() {
         </div>
       </div>
 
-      {(["pakket", "dienst", "extra"] as Kind[]).map((kind) => {
+      {state.status === "loading" && <p className="mt-10 text-sm text-muted-foreground">Laden...</p>}
+      {state.status === "error" && (
+        <div className="mt-10">
+          <AdminLoadError error={state.error} onRetry={load} />
+        </div>
+      )}
+
+      {(state.status === "success" ? (["pakket", "dienst", "extra"] as Kind[]) : []).map((kind) => {
         const group = items.filter((x) => x.kind === kind);
         return (
           <section key={kind} className="mt-10">

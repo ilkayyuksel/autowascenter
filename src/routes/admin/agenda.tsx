@@ -19,7 +19,19 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+// WRITE side (create/move/cancel/delete and the slot pre-check before saving) still uses
+// Supabase until phase 6D-2; all displayed data comes from the API.
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminLoad } from "@/hooks/useAdminLoad";
+import { AdminLoadError } from "@/components/admin/AdminLoadError";
+import {
+  loadAgenda,
+  loadAgendaVehicleOptions,
+  type AgendaBlocked,
+  type AgendaBooking,
+  type AgendaVehicleService,
+  type BookingStatus,
+} from "@/lib/api/admin-reads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,42 +66,11 @@ export const Route = createFileRoute("/admin/agenda")({
 });
 
 // ---------- Types ----------
-type BookingStatus = "nieuw" | "bevestigd" | "voltooid" | "geannuleerd";
-
-type Booking = {
-  id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  vehicle_brand: string | null;
-  vehicle_model: string | null;
-  vehicle_info: string | null;
-  service_title: string | null;
-  preferred_date: string;
-  preferred_time: string;
-  end_time: string | null;
-  total_duration_minutes: number;
-  status: BookingStatus;
-  notes: string | null;
-};
-
-type Blocked = {
-  id: string;
-  start_date: string;
-  end_date: string;
-  start_time: string | null;
-  end_time: string | null;
-  reason: string | null;
-};
-
+// READ models from the API (GET /api/admin/agenda, GET /api/admin/vehicle-types).
+type Booking = AgendaBooking;
+type Blocked = AgendaBlocked;
 type VehicleType = { id: string; title: string };
-type VtService = {
-  id: string; // vehicle_type_services.id
-  service_id: string;
-  title: string;
-  price: number;
-  duration_minutes: number;
-};
+type VtService = AgendaVehicleService;
 
 const STATUS_COLOR: Record<BookingStatus, string> = {
   nieuw:
@@ -129,7 +110,8 @@ function AgendaPage() {
   const [anchor, setAnchor] = useState<Date>(new Date());
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [blocked, setBlocked] = useState<Blocked[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { api, state, run } = useAdminLoad();
+  const loading = state.status === "loading";
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createDefault, setCreateDefault] = useState<{ date: string; time?: string }>({
@@ -150,28 +132,20 @@ function AgendaPage() {
     [view, weekStart, anchor],
   );
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const fromStr = format(days[0], "yyyy-MM-dd");
-    const toStr = format(days[days.length - 1], "yyyy-MM-dd");
-    const [b, bl] = await Promise.all([
-      supabase
-        .from("bookings")
-        .select(
-          "id,customer_name,customer_email,customer_phone,vehicle_brand,vehicle_model,vehicle_info,service_title,preferred_date,preferred_time,end_time,total_duration_minutes,status,notes",
-        )
-        .gte("preferred_date", fromStr)
-        .lte("preferred_date", toStr),
-      supabase
-        .from("blocked_periods")
-        .select("*")
-        .lte("start_date", toStr)
-        .gte("end_date", fromStr),
-    ]);
-    setBookings((b.data as Booking[]) ?? []);
-    setBlocked((bl.data as Blocked[]) ?? []);
-    setLoading(false);
-  }, [days]);
+  // READ: GET /api/admin/agenda?start=&end= (bookings of every status + blocked periods).
+  const refresh = useCallback(() => {
+    const range = {
+      start: format(days[0], "yyyy-MM-dd"),
+      end: format(days[days.length - 1], "yyyy-MM-dd"),
+    };
+    return run(
+      (signal) => loadAgenda(api, range, { signal }),
+      (data) => {
+        setBookings(data.bookings);
+        setBlocked(data.blocked);
+      },
+    );
+  }, [api, run, days]);
 
   useEffect(() => {
     refresh();
@@ -254,6 +228,12 @@ function AgendaPage() {
           </Button>
         </div>
       </div>
+
+      {state.status === "error" && (
+        <div className="mb-4">
+          <AdminLoadError error={state.error} onRetry={refresh} />
+        </div>
+      )}
 
       {/* Calendar grid */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-soft relative">
@@ -370,9 +350,12 @@ function AgendaPage() {
                 {/* Bookings */}
                 {dayBookings.map((b) => {
                   const start = timeToMinutes(b.preferred_time);
-                  const end = b.end_time
-                    ? timeToMinutes(b.end_time)
-                    : start + (b.total_duration_minutes || 60);
+                  // End from the API's pickup moment; multi-day work fills the rest of the day.
+                  const end = b.same_day_end_time
+                    ? timeToMinutes(b.same_day_end_time)
+                    : b.ends_later
+                      ? HOUR_END * 60
+                      : start + (b.total_duration_minutes || 60);
                   const top = minutesToTopPx(start);
                   const height = Math.max(((end - start) / 60) * PX_PER_HOUR, 36);
                   const v = vehicleLabel(b);
@@ -391,7 +374,11 @@ function AgendaPage() {
                       <div className="font-semibold truncate">{b.customer_name}</div>
                       <div className="opacity-80 truncate">
                         {b.preferred_time}
-                        {b.end_time ? `–${b.end_time}` : ""}
+                        {b.same_day_end_time
+                          ? `–${b.same_day_end_time}`
+                          : b.ends_later
+                            ? `–+${b.pickup_time}`
+                            : ""}
                       </div>
                       {v && height > 50 && <div className="opacity-70 truncate">{v}</div>}
                       {b.service_title && height > 70 && (
@@ -485,50 +472,33 @@ function CreateBookingDialog(props: {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
-  const [vtServices, setVtServices] = useState<VtService[]>([]);
+  const [servicesByType, setServicesByType] = useState<Record<string, VtService[]>>({});
+  const vtServices = useMemo(
+    () => (form.vehicle_type_id ? (servicesByType[form.vehicle_type_id] ?? []) : []),
+    [servicesByType, form.vehicle_type_id],
+  );
+  const options = useAdminLoad();
   const [settings, setSettings] = useState<SlotSettings>({
     opening_hour: "10:00",
     closing_hour: "21:00",
     slot_interval_minutes: 30,
   });
 
+  // READ: GET /api/admin/vehicle-types, once: active types and, per type, the available
+  // rows of active + bookable services (no request per vehicle type).
+  const { api: optionsApi, run: runOptions } = options;
   useEffect(() => {
-    supabase
-      .from("vehicle_types")
-      .select("id,title")
-      .eq("active", true)
-      .order("sort_order")
-      .then(({ data }) => data && setVehicleTypes(data as VehicleType[]));
-  }, []);
+    runOptions(
+      (signal) => loadAgendaVehicleOptions(optionsApi, { signal }),
+      (data) => {
+        setVehicleTypes(data.vehicleTypes);
+        setServicesByType(data.servicesByType);
+      },
+    );
+  }, [optionsApi, runOptions]);
 
-  // Load services for chosen vehicle type
+  // Reset selected service when vehicle type changes
   useEffect(() => {
-    if (!form.vehicle_type_id) {
-      setVtServices([]);
-      return;
-    }
-    supabase
-      .from("vehicle_type_services")
-      .select(
-        "id,service_id,price,duration_minutes,available,services!inner(id,title,bookable,active)",
-      )
-      .eq("vehicle_type_id", form.vehicle_type_id)
-      .eq("available", true)
-      .then(({ data }) => {
-        if (!data) return;
-        const opts: VtService[] = (data as any[])
-          .filter((row) => row.services?.bookable && row.services?.active)
-          .map((row) => ({
-            id: row.id,
-            service_id: row.service_id,
-            title: row.services.title,
-            price: Number(row.price),
-            duration_minutes: Number(row.duration_minutes),
-          }))
-          .sort((a, b) => a.title.localeCompare(b.title));
-        setVtServices(opts);
-      });
-    // Reset selected service when vehicle type changes
     setForm((f) => ({ ...f, vts_id: "", service_id: "", service_title: "" }));
   }, [form.vehicle_type_id]);
 
@@ -686,7 +656,11 @@ function CreateBookingDialog(props: {
 
           <div>
             <Label>Dienst *</Label>
-            {!form.vehicle_type_id ? (
+            {options.state.status === "error" ? (
+              <div className="mt-1.5">
+                <AdminLoadError error={options.state.error} />
+              </div>
+            ) : !form.vehicle_type_id ? (
               <p className="text-xs text-muted-foreground italic mt-1.5">
                 Kies eerst een voertuigtype om beschikbare diensten te zien.
               </p>
