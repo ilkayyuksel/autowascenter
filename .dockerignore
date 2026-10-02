@@ -1,0 +1,51 @@
+# Build context for BOTH images (deploy/docker/*.Dockerfile): the repository root, because
+# the API image needs apps/api plus packages/shared and the web image needs src plus
+# packages/shared. Each Dockerfile copies only the files it needs; this list keeps the
+# context small and makes sure host state and secrets can never end up in an image.
+
+# Dependencies and build output (always installed/built inside the image)
+node_modules
+**/node_modules
+.output
+dist
+build
+.vite
+.tanstack
+coverage
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/.env.*
+!deploy/.env.example
+
+# Runtime data of a local run: uploads and backups live in volumes, never in an image
+uploads
+backups
+*.dump
+*.sql.gz
+
+# Version control, CI and editor files
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+*.swp
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Not needed at build or runtime
+docs
+README.md
+eslint.config.js
+.prettierrc
+.prettierignore
+components.json

@@ -116,6 +116,10 @@ The dev server listens on `::` port 8080, which is the API's default `CORS_ORIGI
 
 ## Production runtime
 
+> In production both processes run as containers; see _Docker (production stack)_ below.
+> The commands in this section are what the containers run, and what a bare-metal install
+> would use.
+
 - **Web**: `npm run build`, then `npm run start` (= `node .output/server/index.mjs`). Set `PORT`/`HOST` as needed. `.output/` is self-contained: it needs Node ≥ 22 and nothing else from the repository.
 - **API**: `cd apps/api && npm ci --omit=dev`, `npm run db:migrate` (deploy step), then `npm start` (= `node src/server.ts`; Node ≥ 22.18 runs the TypeScript directly).
 
@@ -168,11 +172,50 @@ Auth0, Google Fonts, the Google Maps embed and social/contact links (see _Extern
 
 **NOT MIGRATED.** The existing Supabase project (old bookings, gallery files, settings) stays outside this codebase. Old bookings are not imported and old gallery files are not copied; that is a separate data-migration phase after the self-hosted runtime is stable. No data migration scripts exist yet.
 
-## Docker preparation
+## Docker (production stack)
 
-Docker is not implemented yet (next phase). What the next phase can rely on:
+Implemented in phase 8; the files live in `deploy/`. Operations:
+`deploy/README.md`, deployment: `docs/PRODUCTION-DEPLOYMENT.md`.
 
-- **Web image**: `npm ci && npm run build`, then copy only `.output/` and run `node .output/server/index.mjs`. Pass the `VITE_*` values as **build arguments**, because they are compiled into the bundle.
-- **API image**: `apps/api` + `packages/shared`, `npm ci --omit=dev`, `node src/server.ts`. Migrations run as a separate one-off command.
-- **Volumes**: PostgreSQL data and `UPLOAD_DIR` (both backed up).
-- **Reverse proxy** (Caddy, later): `/` → web, `/api/*` → API (or a separate `api.` host), `/uploads/gallery/*` → API or the volume. Set `CORS_ORIGIN` and `PUBLIC_UPLOAD_URL` to the public URLs, and enable `trustProxy` in the API.
+```
+Internet ──:80/:443──► caddy ──┬─ /api/*, /uploads/*  ──► api  ──► postgres
+                               │                              └──► uploads volume
+                               └─ everything else     ──► web
+                                                            backup ──► backup volume
+```
+
+| Service    | Image                           | Published ports | Runs as               |
+| ---------- | ------------------------------- | --------------- | --------------------- |
+| `caddy`    | `caddy:2.11.4-alpine`           | 80, 443 (+udp)  | root (binds :80/:443) |
+| `web`      | built on `node:22.18.0-alpine`  | none            | `node`                |
+| `api`      | built on `node:22.18.0-alpine`  | none            | `node`                |
+| `postgres` | `postgres:18.6-alpine`          | none            | `postgres`            |
+| `backup`   | built on `postgres:18.6-alpine` | none            | `postgres`            |
+
+- **Same origin.** The web app is built with an **empty** `VITE_API_BASE_URL`, so the
+  browser requests `/api/...` on the site's own host and Caddy forwards it to the API. There
+  is no second public port, no API host name in the bundle and no cross-origin request. The
+  value is not `/api`, because the API already serves its routes under `/api`.
+- **Nothing but Caddy is published.** PostgreSQL, the API and the web app are only reachable
+  over the private `internal` network.
+- **`trustProxy`.** The API gets `TRUST_PROXY=true` so the per-IP rate limits use the real
+  client IP from `X-Forwarded-For` instead of Caddy's address. Off by default, so a directly
+  exposed API cannot be fooled by a forged header.
+- **Volumes**: `postgres_data`, `uploads_data`, `backup_data`, `caddy_data`,
+  `caddy_config`. Only the backup job mounts `backup_data`.
+- **Migrations** are an explicit step
+  (`docker compose run --rm api node src/scripts/migrate.ts`, using `drizzle-orm`'s migrator
+  so the production image needs no dev tooling). Starting the stack never migrates.
+- **Hardening**: `web` and `api` run non-root with a read-only root filesystem,
+  `cap_drop: ALL` and a tmpfs on `/tmp`; every service gets `no-new-privileges`. Images are
+  pinned to exact versions, and `.dockerignore` keeps `.env`, `node_modules`, `uploads`,
+  `backups` and `.output` out of every build context.
+- **Backups**: daily `pg_dump | gzip` with a timestamp, retention
+  `BACKUP_RETENTION_DAYS` (default 14), written to the private backup volume. The uploads
+  volume and `deploy/.env` are backed up manually; see `docs/BACKUP-RESTORE.md`.
+- **Logs** go to stdout/stderr with rotation (10 MB × 5 per container).
+
+The API keeps running its TypeScript sources with Node's built-in type stripping
+(`node src/server.ts`). That is the same `node` binary as in any production process, not a
+development runner: no transpiler, no loader, no extra dependency. See
+`deploy/README.md` for the full reasoning.

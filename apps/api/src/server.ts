@@ -22,6 +22,7 @@ export async function startServer(config: Config = loadConfig()) {
     logLevel: config.logLevel,
     bookingRateLimit: config.bookingRateLimit,
     tokenVerifier: config.auth0 ? createAuth0Verifier(config.auth0) : null,
+    trustProxy: config.trustProxy,
     storage,
     uploads: config.uploads,
   });

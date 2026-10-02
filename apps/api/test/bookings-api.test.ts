@@ -277,6 +277,58 @@ describe("POST /api/bookings", () => {
     }
   });
 
+  test("behind a proxy (trustProxy) the rate limit counts the real client IP", async () => {
+    // Without trustProxy every visitor would share Caddy's IP: one visitor could use up
+    // the whole booking limit for everyone.
+    const proxied = await createApp({
+      db,
+      corsOrigins: [ORIGIN],
+      logLevel: "silent",
+      clock: () => NOW,
+      trustProxy: true,
+      bookingRateLimit: { max: 1, timeWindowMs: 60_000 },
+    });
+    const fromClient = (ip: string, time: string) =>
+      proxied.inject({
+        method: "POST",
+        url: "/api/bookings",
+        headers: { "x-forwarded-for": ip },
+        payload: bookingBody({ preferred_time: time }),
+      });
+    try {
+      assert.equal((await fromClient("203.0.113.10", "10:00")).statusCode, 201);
+      // Same client again: limited.
+      assertError(await fromClient("203.0.113.10", "13:00"), 429, "RATE_LIMITED");
+      // A different client still gets through.
+      assert.equal((await fromClient("203.0.113.11", "13:00")).statusCode, 201);
+    } finally {
+      await proxied.close();
+    }
+  });
+
+  test("without trustProxy a forged X-Forwarded-For cannot bypass the rate limit", async () => {
+    const direct = await createApp({
+      db,
+      corsOrigins: [ORIGIN],
+      logLevel: "silent",
+      clock: () => NOW,
+      bookingRateLimit: { max: 1, timeWindowMs: 60_000 },
+    });
+    const forged = (ip: string, time: string) =>
+      direct.inject({
+        method: "POST",
+        url: "/api/bookings",
+        headers: { "x-forwarded-for": ip },
+        payload: bookingBody({ preferred_time: time }),
+      });
+    try {
+      assert.equal((await forged("203.0.113.20", "10:00")).statusCode, 201);
+      assertError(await forged("203.0.113.21", "13:00"), 429, "RATE_LIMITED");
+    } finally {
+      await direct.close();
+    }
+  });
+
   test("database failures return 503/500 without internals and store nothing", async () => {
     const { db: downDb, pool } = createDb("postgres://user:s3cret@127.0.0.1:1/nope", {
       connectionTimeoutMillis: 2_000,

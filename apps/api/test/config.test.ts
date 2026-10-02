@@ -101,6 +101,45 @@ describe("loadConfig", () => {
     );
   });
 
+  test("TRUST_PROXY: off by default, true, false, or a trusted proxy list", () => {
+    assert.equal(loadConfig({ DATABASE_URL: DB }).trustProxy, false);
+    assert.equal(loadConfig({ DATABASE_URL: DB, TRUST_PROXY: "true" }).trustProxy, true);
+    assert.equal(loadConfig({ DATABASE_URL: DB, TRUST_PROXY: "TRUE" }).trustProxy, true);
+    assert.equal(loadConfig({ DATABASE_URL: DB, TRUST_PROXY: "false" }).trustProxy, false);
+    assert.equal(
+      loadConfig({ DATABASE_URL: DB, TRUST_PROXY: "172.16.0.0/12,10.0.0.0/8" }).trustProxy,
+      "172.16.0.0/12,10.0.0.0/8",
+    );
+  });
+
+  test("an empty value counts as not set (Docker Compose always defines listed keys)", () => {
+    // Optional settings left blank in deploy/.env must not fail validation.
+    const config = loadConfig({
+      DATABASE_URL: DB,
+      AUTH0_ISSUER: "",
+      PUBLIC_UPLOAD_URL: "",
+      TRUST_PROXY: "",
+      LOG_LEVEL: "",
+    });
+    assert.equal(config.auth0, null);
+    assert.equal(config.trustProxy, false);
+    assert.equal(config.logLevel, "info");
+    assert.equal(config.uploads.publicBaseUrl, `http://localhost:${config.port}/uploads`);
+    // Blank still means "missing" where production requires a value.
+    assert.throws(
+      () =>
+        loadConfig({
+          NODE_ENV: "production",
+          DATABASE_URL: DB,
+          CORS_ORIGIN: "",
+          AUTH0_DOMAIN: "",
+          AUTH0_AUDIENCE: "",
+          PUBLIC_UPLOAD_URL: "",
+        }),
+      /CORS_ORIGIN: required in production/,
+    );
+  });
+
   test("requires DATABASE_URL", () => {
     assert.throws(() => loadConfig({}), /DATABASE_URL/);
   });

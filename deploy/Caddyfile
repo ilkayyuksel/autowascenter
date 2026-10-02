@@ -1,0 +1,53 @@
+# Reverse proxy for the Autowascenter stack.
+#
+# One public origin (https://$DOMAIN) serves everything:
+#   /api/*      → api container  (the API mounts its routes under /api itself)
+#   /uploads/*  → api container  (gallery files from the uploads volume)
+#   everything else → web container (TanStack Start SSR)
+#
+# Because the browser stays on one origin, API requests are not cross-origin and the API
+# needs no public port. Caddy obtains and renews certificates automatically (HTTP-01 on
+# :80, so port 80 must stay reachable); state lives in the caddy_data volume.
+#
+# $DOMAIN comes from deploy/.env. For a local test without a real domain, use
+# DOMAIN=localhost: Caddy then issues a certificate from its own internal CA (use
+# `curl -k`). Validate changes with:
+#   docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The API also sets its own headers on /uploads/gallery/* (immutable caching, nosniff,
+	# a strict CSP); they pass through unchanged.
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle /uploads/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	# Enable HSTS only after HTTPS is verified on the real domain: it tells browsers to
+	# refuse plain HTTP for this host for the given period, which cannot be undone quickly.
+	# header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# One canonical domain: www redirects to the bare domain, keeping the path and query.
+# Remove this block if the www host is not pointed at this server.
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -43,6 +43,11 @@ describe("readApiBaseUrl", () => {
       "https://api.autowascenter.be",
     );
   });
+
+  test("an explicitly empty value means same origin (production behind one reverse proxy)", () => {
+    assert.equal(readApiBaseUrl({ VITE_API_BASE_URL: "" }), "");
+    assert.equal(readApiBaseUrl({ VITE_API_BASE_URL: "   " }), "");
+  });
 });
 
 describe("sanitizeReturnTo (no open redirects after login)", () => {

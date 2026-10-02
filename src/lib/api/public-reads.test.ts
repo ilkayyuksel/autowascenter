@@ -16,10 +16,10 @@ import {
 } from "./public-reads.ts";
 import { apiError, BASE, fakeFetch, hangingFetch, ID, jsonResponse } from "./test-fixtures.ts";
 
-function apiWith(respond: (url: string) => Response) {
+function apiWith(respond: (url: string) => Response, baseUrl = BASE) {
   const fetch = fakeFetch(respond);
   // Public client: no token provider at all.
-  return { api: createApiClient({ baseUrl: BASE, fetchImpl: fetch.impl }), calls: fetch.calls };
+  return { api: createApiClient({ baseUrl, fetchImpl: fetch.impl }), calls: fetch.calls };
 }
 
 const service = {
@@ -238,5 +238,14 @@ describe("public reads: details", () => {
   test("withFallback keeps the example content when the API has no items", () => {
     assert.deepEqual(withFallback([], ["voorbeeld"]), ["voorbeeld"]);
     assert.deepEqual(withFallback(["echt"], ["voorbeeld"]), ["echt"]);
+  });
+});
+
+describe("same-origin base URL (production behind one reverse proxy)", () => {
+  test("requests go to /api/... on the site's own origin, with no host or port", async () => {
+    const { api, calls } = apiWith(() => jsonResponse(200, { data: [service] }), "");
+    await getPublicServices(api, { limit: 4 });
+    assert.equal(calls[0]!.url, "/api/services?limit=4");
+    assert.equal(calls[0]!.headers.has("authorization"), false);
   });
 });

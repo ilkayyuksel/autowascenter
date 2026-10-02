@@ -1,0 +1,223 @@
+# Production stack for Autowascenter. Run from this directory:
+#
+#   cp .env.example .env     # fill in; never committed
+#   docker compose build
+#   docker compose up -d postgres
+#   docker compose run --rm api node src/scripts/migrate.ts   # explicit, one-off
+#   docker compose up -d
+#
+# Only Caddy publishes host ports (80/443). PostgreSQL, the API and the web app are
+# reachable on the private `internal` network only, so the database can never be reached
+# from the internet and the API needs no public port of its own: the browser calls
+# /api/... on the site's own origin and Caddy forwards it.
+#
+# Starting the stack never runs migrations; see docs/PRODUCTION-DEPLOYMENT.md.
+name: autowascenter
+
+# Container logs go to stdout/stderr (the API logs JSON through Fastify). The json-file
+# driver rotates them so no container can fill the disk with logs.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  uploads_data:
+  backup_data:
+  caddy_data:
+  caddy_config:
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Explicit, so the data directory does not depend on the image's default (which
+      # changed in PostgreSQL 18). The volume is mounted one level up, at the directory the
+      # image declares, so the data lives inside the volume either way.
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    # No `ports`: the database is only reachable over the internal network.
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    logging: *default-logging
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/docker/api.Dockerfile
+    image: autowascenter-api:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Derived from the POSTGRES_* values by default, so the password exists in one place
+      # and the host is always the internal service name (never localhost).
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}}
+      # Behind Caddy the socket address is the proxy's, so the real client IP must come from
+      # X-Forwarded-For; otherwise the per-IP rate limits would treat all visitors as one.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://${DOMAIN}}
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      AUTH0_ISSUER: ${AUTH0_ISSUER:-}
+      UPLOAD_DIR: /app/uploads
+      PUBLIC_UPLOAD_URL: ${PUBLIC_UPLOAD_URL:-https://${DOMAIN}/uploads}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
+      BOOKING_RATE_LIMIT_MAX: ${BOOKING_RATE_LIMIT_MAX:-10}
+      BOOKING_RATE_LIMIT_WINDOW_MS: ${BOOKING_RATE_LIMIT_WINDOW_MS:-60000}
+      UPLOAD_RATE_LIMIT_MAX: ${UPLOAD_RATE_LIMIT_MAX:-30}
+      UPLOAD_RATE_LIMIT_WINDOW_MS: ${UPLOAD_RATE_LIMIT_WINDOW_MS:-3600000}
+    volumes:
+      # Gallery files survive container recreation; the only writable path of this service.
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Readiness, not liveness: /health/db fails while the database is unreachable, so the
+    # container is only "healthy" when it can actually serve requests.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health/db').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    logging: *default-logging
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/docker/web.Dockerfile
+      args:
+        # PUBLIC values, compiled into the browser bundle. Empty API base URL = same origin.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL-}
+        VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+        VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+        VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+    image: autowascenter-web:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+    # No database credentials: the web server never talks to PostgreSQL.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    # The only service with published ports. 443/udp serves HTTP/3.
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and automation state must survive a restart, or Let's Encrypt rate
+      # limits are hit on every deploy.
+      - caddy_data:/data
+      - caddy_config:/config
+    # service_started, not service_healthy: the site must still be served (and the API
+    # error states shown) when the API or database is temporarily down.
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    logging: *default-logging
+
+  backup:
+    build:
+      context: ..
+      dockerfile: deploy/docker/backup.Dockerfile
+    image: autowascenter-backup:local
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      # Only this service mounts the backup volume: not the API, not the web app, not Caddy.
+      - backup_data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    logging: *default-logging

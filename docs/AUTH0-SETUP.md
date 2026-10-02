@@ -43,7 +43,24 @@ A mismatch makes every admin call fail with 401: the token's `aud` is then not t
 | **Allowed Logout URLs**   | `http://localhost:8080`             | Logout returns to the public home page                                          |
 | **Allowed Web Origins**   | `http://localhost:8080`             | Needed for silent token renewal from the browser                                |
 
-For production, add the production values separated by commas, e.g. `https://autowascenter.be/admin-login`.
+For production, **add** (do not replace) the values for the deployed domain, comma
+separated. `<DOMAIN>` is the value of `DOMAIN` in `deploy/.env`; nothing in the source code
+hardcodes the production host.
+
+| Field                     | Production value to add        |
+| ------------------------- | ------------------------------ |
+| **Allowed Callback URLs** | `https://<DOMAIN>/admin-login` |
+| **Allowed Logout URLs**   | `https://<DOMAIN>`             |
+| **Allowed Web Origins**   | `https://<DOMAIN>`             |
+
+With `DOMAIN=autowascenter.be` that is `https://autowascenter.be/admin-login`,
+`https://autowascenter.be` and `https://autowascenter.be`. Add the `www` host too only if
+visitors can reach the admin there; the Docker stack redirects `www` to the bare domain, so
+it is not needed.
+
+These are **manual Dashboard changes**: the deployment never edits the Auth0 tenant. The
+matching environment variables (`AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `VITE_AUTH0_*`) live in
+`deploy/.env`; see `deploy/README.md`. The API and the SPA need **no client secret**.
 
 **Refresh Token Rotation** (Settings → Refresh Token Rotation):
 

@@ -22,9 +22,21 @@ export function readAuth0Config(env: Env): Auth0Config | null {
   return domain && clientId && audience ? { domain, clientId, audience } : null;
 }
 
-/** Base URL of the self-hosted API (no trailing slash). */
+/**
+ * Base URL of the self-hosted API, without trailing slash.
+ *
+ * - Not set (development default): the API on its own port, `http://localhost:3001`.
+ * - Explicitly empty (production): **same origin**, so the browser requests `/api/...` on
+ *   the site's own host and the reverse proxy forwards them to the API container. Nothing
+ *   needs the API's internal host name or port, and the requests are not cross-origin.
+ *
+ * Note: the API serves its routes under `/api` already, so the value is the API's ORIGIN
+ * (or empty), never `/api`.
+ */
 export function readApiBaseUrl(env: Env): string {
-  return (str(env.VITE_API_BASE_URL) || "http://localhost:3001").replace(/\/+$/, "");
+  const configured = env.VITE_API_BASE_URL;
+  if (configured === undefined || configured === null) return "http://localhost:3001";
+  return str(configured).replace(/\/+$/, "");
 }
 
 /**

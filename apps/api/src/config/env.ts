@@ -2,6 +2,19 @@ import { z } from "zod";
 
 const DEV_CORS_ORIGIN = "http://localhost:8080"; // Vite dev server of the current frontend
 
+/**
+ * Fastify's `trustProxy`: false (off), true (trust the proxy in front), or a
+ * comma-separated list of trusted proxy addresses/subnets (stricter: a forged
+ * X-Forwarded-For from anywhere else is then ignored).
+ */
+function parseTrustProxy(value: string | undefined): boolean | string {
+  if (value === undefined) return false;
+  const normalized = value.toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return value;
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -27,6 +40,14 @@ const envSchema = z
       .string()
       .regex(/^https:\/\/[^/]+\/$/, "must look like https://<domain>/")
       .optional(),
+    /**
+     * Behind a reverse proxy (Caddy in the Docker stack) the socket address is the proxy's,
+     * so the real client IP must be taken from X-Forwarded-For. Without this, the per-IP
+     * rate limits would count every visitor as one client. Values: "true" (trust the proxy
+     * in front) or a comma-separated list of trusted proxy IPs/subnets. Default off, so a
+     * directly exposed API can never be spoofed through a forged header.
+     */
+    TRUST_PROXY: z.string().trim().min(1).optional(),
     /** Root of the local file storage (a Docker volume in production). */
     UPLOAD_DIR: z.string().min(1).default("./uploads"),
     /** Public base URL of uploaded files, without trailing slash; required in production. */
@@ -89,6 +110,7 @@ const envSchema = z
 
     return {
       nodeEnv: env.NODE_ENV,
+      trustProxy: parseTrustProxy(env.TRUST_PROXY),
       isProduction: env.NODE_ENV === "production",
       databaseUrl: env.DATABASE_URL,
       host: env.HOST,
@@ -120,7 +142,13 @@ export type Config = z.output<typeof envSchema>;
  * Throws with the names of invalid variables only; values (secrets) are never included.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const result = envSchema.safeParse(env);
+  // An empty value counts as "not set". Docker Compose always defines every key listed in
+  // a service's `environment`, so an optional setting left blank in the deploy .env would
+  // otherwise be parsed as the empty string and fail validation.
+  const provided = Object.fromEntries(
+    Object.entries(env).filter(([, value]) => value !== undefined && value.trim() !== ""),
+  );
+  const result = envSchema.safeParse(provided);
   if (!result.success) {
     const problems = result.error.issues
       .map((issue) => `${issue.path.join(".") || "env"}: ${issue.message}`)

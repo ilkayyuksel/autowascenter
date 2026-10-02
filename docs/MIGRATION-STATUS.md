@@ -19,7 +19,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 7A: publieke frontend READ-migratie           | **Afgerond** (zie _Phase 7A_); booking-submit nog via Supabase                 |
 | Fase 7B: publieke booking-WRITE-migratie           | **Afgerond** (zie _Phase 7B_); geen runtime-Supabase meer                      |
 | Fase 7C: Supabase/Lovable/Cloudflare-cleanup       | **Afgerond** (zie _Phase 7C_); self-hosted Node-build                          |
-| Volgende fase                                      | **Production Docker Compose infrastructure** (8)                               |
+| Fase 8: production Docker Compose                  | **Afgerond** (zie _Phase 8_); runtime-verificatie op de server nog te doen     |
+| Volgende fase                                      | **Production server deployment en Hostinger DNS/HTTPS** (9)                    |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
@@ -376,6 +377,72 @@ Details: `docs/SELF-HOSTED-ARCHITECTURE.md` en `docs/DEPRECATION-CLEANUP-MAP.md`
 - **Niet in deze fase**: Docker, Caddy, DNS/SSL en deployment.
 
 **Next phase: "Production Docker Compose infrastructure"**
+
+## Phase 8 — Docker Compose Infrastructure
+
+**Status: COMPLETE (configuratie) — runtime-verificatie op de server nog te doen**
+
+Details: `deploy/README.md`, `docs/PRODUCTION-DEPLOYMENT.md`, `docs/BACKUP-RESTORE.md` en
+`docs/SELF-HOSTED-ARCHITECTURE.md` (sectie _Docker (production stack)_).
+
+- **Services**: `caddy`, `web`, `api`, `postgres` en `backup`, gedefinieerd in
+  `deploy/docker-compose.yml`. De images staan exact vast: `caddy:2.11.4-alpine`,
+  `postgres:18.6-alpine` en `node:22.18.0-alpine` voor de twee eigen builds; `:latest`
+  wordt nergens gebruikt.
+- **Networking**: één privaat netwerk. Alleen Caddy publiceert poorten (80 en 443, ook UDP
+  voor HTTP/3). PostgreSQL, de API en de webapp hebben géén host-poort.
+  - De browser werkt same-origin: de webapp wordt gebouwd met een **lege**
+    `VITE_API_BASE_URL`, dus de requests gaan naar `/api/...` op het eigen domein en Caddy
+    stuurt ze door. Niet `/api`, want de API serveert zijn routes zelf al onder `/api`.
+  - De API krijgt `TRUST_PROXY=true`, zodat de rate limits per IP het echte client-IP uit
+    `X-Forwarded-For` gebruiken in plaats van het adres van Caddy. Standaard staat dit uit.
+- **Volumes**: `postgres_data`, `uploads_data`, `backup_data`, `caddy_data` en
+  `caddy_config`. Alleen de backupjob mount `backup_data`.
+- **Caddy**: `/api/*` en `/uploads/*` naar de API, al het andere naar de webapp.
+  Automatische HTTPS met persistente certificaten; het domein komt uit `DOMAIN` en staat
+  nergens hardcoded. HSTS staat als commentaar klaar om aan te zetten zodra HTTPS op het
+  echte domein werkt.
+- **PostgreSQL**: versie 18.6 met expliciete `PGDATA`, zodat de datamap niet afhangt van de
+  default die in PostgreSQL 18 veranderde. Healthcheck via `pg_isready`; de API start pas
+  als de database gezond is.
+- **API**: healthcheck op `/health/db`, dus de container is pas gezond als hij de database
+  echt kan bereiken. Draait non-root met een read-only root filesystem, `cap_drop: ALL` en
+  een tmpfs op `/tmp`.
+- **Web**: healthcheck op `/`, zonder database. Krijgt géén databasegegevens of Auth0-secret;
+  de image bevat alleen de `.output`-bundel.
+- **Migraties**: een expliciete stap
+  (`docker compose run --rm api node src/scripts/migrate.ts`). Het nieuwe script gebruikt de
+  migrator van `drizzle-orm`, zodat de productie-image geen dev-tooling nodig heeft.
+  `docker compose up -d` wijzigt het schema nooit.
+- **Backups**: dagelijks `pg_dump | gzip` met een UTC-timestamp naar het privévolume,
+  retentie via `BACKUP_RETENTION_DAYS` (standaard 14 dagen). Er wordt eerst naar `.part`
+  geschreven en daarna hernoemd, en opruimen gebeurt alleen ná een geslaagde dump. De
+  uploads en `deploy/.env` gaan handmatig mee in de back-up.
+- **Real PostgreSQL testing**: `apps/api/test/real-postgres.integration.test.ts` dekt wat
+  PGlite niet kan aantonen: het productie-migratiepad op een lege database, de
+  schema-objecten zoals de server ze echt aanmaakt, **écht parallelle** boekingen op
+  meerdere connecties (2 en 10 tegelijk op hetzelfde slot) en rollback bij een geforceerde
+  fout. De suite slaat over zonder `TEST_DATABASE_URL`, dus `npm test` blijft groen zonder
+  Docker.
+- **Code-aanpassingen** (klein, alleen production-correctness):
+  - `TRUST_PROXY` in de API-config en `Fastify({ trustProxy })`;
+  - een lege env-waarde geldt nu als "niet gezet" (Compose zet elke genoemde key altijd);
+  - `readApiBaseUrl` ondersteunt same-origin via een expliciet lege waarde;
+  - `src/scripts/migrate.ts` plus het script `db:migrate:prod`.
+- **Tests**: root **201 tests** (was 186; +15 infrastructuurcontract in
+  `src/deploy-stack.test.ts`), `apps/api` **236 tests** (235 geslaagd, 1 overgeslagen; +3
+  voor `TRUST_PROXY` en lege env-waarden, plus de overgeslagen integratiesuite).
+- **Niet uitgevoerd**: de Docker-engine draaide niet op de ontwikkelmachine
+  (`com.docker.service` vereist Administrator-rechten), en er was geen lokale PostgreSQL.
+  `docker compose build`, `up`, de persistentietests, de restore-test en de
+  end-to-end-browsertest staan daarom nog open; de exacte commando's staan als stappen 6–16
+  in `docs/PRODUCTION-DEPLOYMENT.md`. Wat wél geverifieerd is: `docker compose config`
+  zonder waarschuwingen, de 15 contracttests, de web- en API-build, de productie-webserver
+  buiten Docker en de schema-queries van de integratiesuite tegen PGlite.
+- **Niet in deze fase**: DNS, firewall, serverconfiguratie, datamigratie en het gebruik van
+  een echte productiedatabase of echte uploads.
+
+**Next phase: "Production server deployment and Hostinger DNS/HTTPS"**
 
 ## Current architecture
 

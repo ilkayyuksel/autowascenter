@@ -37,6 +37,8 @@ uploads/
 backups/
 *.dump
 *.sql.gz
+# Manual uploads backup (docs/BACKUP-RESTORE.md)
+uploads-*.tar.gz
 
 # Local overrides
 *.local

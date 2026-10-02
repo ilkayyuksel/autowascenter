@@ -31,6 +31,11 @@ export interface AppOptions {
    */
   storage?: StorageProvider | null;
   uploads?: { maxBytes: number; rateLimit: { max: number; timeWindowMs: number } };
+  /**
+   * Fastify `trustProxy`. Enable it only when a reverse proxy sits in front (the Docker
+   * stack sets TRUST_PROXY=true for Caddy), so rate limits use the real client IP.
+   */
+  trustProxy?: FastifyServerOptions["trustProxy"];
   /** Injectable clock for tests; defaults to the system clock. */
   clock?: () => Date;
   /** Test seam: where log lines go (defaults to stdout). */
@@ -50,6 +55,7 @@ export async function createApp({
   logLevel = "info",
   bookingRateLimit = DEFAULT_BOOKING_RATE_LIMIT,
   tokenVerifier = null,
+  trustProxy = false,
   storage = null,
   uploads = DEFAULT_UPLOADS,
   clock,
@@ -63,7 +69,7 @@ export async function createApp({
     ...(logStream ? { stream: logStream } : {}),
   };
 
-  const app = Fastify({ logger });
+  const app = Fastify({ logger, trustProxy });
 
   registerDatabase(app, db);
   registerClock(app, clock);
