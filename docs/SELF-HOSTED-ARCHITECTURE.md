@@ -105,12 +105,19 @@ Rule: every `VITE_*` value is visible to every visitor. Server secrets (`DATABAS
 ## Development
 
 ```sh
+# Shared contracts: their own dependencies (see the note below)
+cd packages/shared && npm ci && cd ../..
+
 # API (terminal 1)
 cd apps/api && npm ci && npm run db:migrate && npm run dev     # http://localhost:3001
 
 # Web (terminal 2)
 npm ci && npm run dev                                          # http://localhost:8080
 ```
+
+`packages/shared` is a `file:` dependency, so npm links it and Node resolves its imports
+from the link's real path. It therefore needs its own `node_modules`, or the API fails at
+startup with `ERR_MODULE_NOT_FOUND` on `zod`. See `apps/api/README.md`.
 
 The dev server listens on `::` port 8080, which is the API's default `CORS_ORIGIN`.
 

@@ -96,12 +96,22 @@ Invalid configuration stops the process at startup with exit code 1 and names th
 ## Running locally
 
 ```sh
+# packages/shared needs its OWN dependencies, see the note below
+cd packages/shared && npm ci && cd ../..
+
 cd apps/api
 npm ci
 cp .env.example .env        # point DATABASE_URL to a local PostgreSQL
 npm run db:migrate          # apply drizzle/*.sql to DATABASE_URL
 npm run dev                 # node --watch, loads .env
 ```
+
+**Why `packages/shared` is installed separately.** `@autowascenter/shared` is a
+`file:../../packages/shared` dependency, so npm links it. Node resolves the imports inside
+that package from the link's **real** path (`packages/shared/...`), which never reaches
+`apps/api/node_modules`. Without its own `node_modules`, the API fails at startup with
+`ERR_MODULE_NOT_FOUND: Cannot find package 'zod' imported from packages/shared/src/...`.
+The API image does the same (`deploy/docker/api.Dockerfile`).
 
 | Script                    | What it does                                                           |
 | ------------------------- | ---------------------------------------------------------------------- |

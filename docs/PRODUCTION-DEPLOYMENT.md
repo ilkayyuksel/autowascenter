@@ -7,9 +7,10 @@ described in `deploy/README.md`; the architecture in `docs/SELF-HOSTED-ARCHITECT
 > That document wraps around this one (which server, how to harden it, which DNS records,
 > the cutover order and the HTTPS/HSTS checks). The steps here are the stack itself.
 >
-> **Not yet executed.** No Docker engine was available on the development machine, so steps
-> 6–16 have **NOT RUN**. They are the acceptance test of the deployment and the gate before
-> the DNS cutover (`docs/HOSTINGER-DEPLOYMENT.md`, section 7).
+> **Executed once on a local Docker host** (2026-10-03, `DOMAIN=localhost`): steps 6–16 all
+> passed, including the real-PostgreSQL tests, persistence and the restore rehearsal — see
+> `docs/HOSTINGER-DEPLOYMENT.md`, section 7. On the server they are the acceptance test and
+> the gate before the DNS cutover; run them again there.
 >
 > Steps 1–5 are **one-time** per server; steps 6–16 run on the first deployment and the
 > relevant ones again on every update (see `deploy/README.md`, _Update procedure_).
@@ -129,6 +130,13 @@ Explicitly, never automatically:
 
 ```sh
 docker compose run --rm api node src/scripts/migrate.ts
+```
+
+The `psql` checks below use `$POSTGRES_USER` and `$POSTGRES_DB`. Those live in
+`deploy/.env`, not in your shell, so load them once per session:
+
+```sh
+set -a; . ./.env; set +a
 ```
 
 Expected: `Applying migrations from /repo/apps/api/drizzle` followed by `Migrations up to

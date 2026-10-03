@@ -4,22 +4,18 @@ Deploying the Docker stack on a Hostinger VPS and moving DNS/HTTPS to it. The st
 and its per-step commands are in `docs/PRODUCTION-DEPLOYMENT.md`; this document adds the
 Hostinger layer, the DNS cutover and the gate that must pass **before** the domain is moved.
 
-> **Status: NOT EXECUTED.** Nothing in this document has been run, and no DNS record has
-> been changed. The environment this repository is developed in has
+> **Status: the stack is validated, the server deployment is not.**
 >
-> - no running Docker engine (`com.docker.service` on this Windows machine needs
->   Administrator rights, which this session does not have), and
-> - no access to a Hostinger server, the hPanel or the Auth0 Dashboard (no SSH key, no
->   credentials).
+> The whole runtime gate (section 7, checks 1–16) was executed on **2026-10-03 on a local
+> Docker host** and passed: image build, migrations, the schema on real PostgreSQL 18.6, the
+> 12 integration tests including truly parallel bookings, routing through Caddy, upload and
+> database persistence, the backup job with retention, and the **restore rehearsal**. This
+> resolves the blocker from phase 8.
 >
-> So the whole runtime validation of phase 8 is still open: image build, `compose up`, the
-> real-PostgreSQL tests, the concurrency test, upload/database persistence, the backup job
-> and the restore rehearsal are all **NOT RUN**. They are the gate in section 8 below.
->
-> What _has_ been verified statically: `docker compose config` parses without warnings, the
-> 15 infrastructure contract tests in `src/deploy-stack.test.ts` pass, and the three pinned
-> image tags exist in Docker Hub (`postgres:18.6-alpine`, `caddy:2.11.4-alpine`,
-> `node:22.18.0-alpine`, checked 2026-10-03).
+> Still **NOT RUN**, because they need the server and the domain: everything on the
+> Hostinger VPS itself (sections 1–4), the DNS cutover (section 8), the public Let's Encrypt
+> certificate (section 9, validated locally with Caddy's internal CA) and the Auth0 browser
+> login (section 11). **No DNS record has been changed.**
 
 ## 0. What this phase needs that the repository cannot provide
 
@@ -246,24 +242,47 @@ Set the TTL low (300 s) a day before the cutover so a rollback propagates quickl
 
 This is the gate. Every line must be a real, observed pass — not a static check.
 
-| #   | Check                                    | Command / reference                                                      | Status  |
-| --- | ---------------------------------------- | ------------------------------------------------------------------------ | ------- |
-| 1   | Image build                              | `docker compose build` (`docs/PRODUCTION-DEPLOYMENT.md` 7)               | NOT RUN |
-| 2   | No secret in the web image               | step 7 of the same document                                              | NOT RUN |
-| 3   | PostgreSQL healthy                       | `docker compose up -d postgres`, `docker compose ps`                     | NOT RUN |
-| 4   | Migrations                               | `docker compose run --rm api node src/scripts/migrate.ts`                | NOT RUN |
-| 5   | Schema objects                           | the `psql` checks in step 9 (tables, `btree_gist`, exclusion constraint) | NOT RUN |
-| 6   | Real-PostgreSQL integration tests        | step 9, `TEST_DATABASE_URL=… npm test` in `apps/api`                     | NOT RUN |
-| 7   | Concurrency (2 and 10 parallel bookings) | part of the same suite                                                   | NOT RUN |
-| 8   | Rollback / transactions                  | part of the same suite                                                   | NOT RUN |
-| 9   | Whole stack healthy                      | `docker compose up -d`, `docker compose ps`                              | NOT RUN |
-| 10  | API readiness                            | `/health/db` → 200 (step 11)                                             | NOT RUN |
-| 11  | Routing through Caddy                    | steps 12–13                                                              | NOT RUN |
-| 12  | Upload persistence                       | step 14 + restart/recreate                                               | NOT RUN |
-| 13  | Database persistence                     | `docker compose down` (**without** `-v`) → `up -d`, data still there     | NOT RUN |
-| 14  | Backup job                               | `docker compose logs backup`, a `.sql.gz` in the volume                  | NOT RUN |
-| 15  | **Restore rehearsal**                    | `docs/BACKUP-RESTORE.md` step 4                                          | NOT RUN |
-| 16  | Auth0 production URLs configured         | `docs/AUTH0-SETUP.md` section 3                                          | NOT RUN |
+| #   | Check                                          | How it was validated                                                                                            | Status  |
+| --- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | Image build                                    | `docker compose build` (all three images)                                                                       | PASS    |
+| 2   | No secret in the web image                     | no `.env`, no sources; the database password occurs 0× in the whole `.output`                                   | PASS    |
+| 3   | PostgreSQL healthy                             | `pg_isready` healthcheck green in ~6 s; `PGDATA` proven to be in the volume                                     | PASS    |
+| 4   | Migrations                                     | `docker compose run --rm api node src/scripts/migrate.ts`                                                       | PASS    |
+| 5   | Schema objects                                 | 10 tables, `btree_gist`, the enum, 8 triggers, 25 indexes, exclusion constraint                                 | PASS    |
+| 6   | Real-PostgreSQL integration tests              | 12/12 on PostgreSQL 18.6 (migration path, schema, FK actions)                                                   | PASS    |
+| 7   | Concurrency                                    | 2 parallel → 1×201 + 1×409; 10 parallel → 1 booking + 9×409; 3 slots → 3×201                                    | PASS    |
+| 8   | Rollback / transactions                        | 5 forced mid-transaction failures, nothing partial                                                              | PASS    |
+| 9   | Whole stack healthy                            | postgres/api/web/caddy healthy, backup running, no restart loops                                                | PASS    |
+| 10  | API readiness                                  | `/health/db` → 200                                                                                              | PASS    |
+| 11  | Routing through Caddy                          | 7 public pages 200, 5 API endpoints 200, admin → 401, HTTP→HTTPS 308, www → 301                                 | PASS    |
+| 12  | Upload persistence                             | file served through Caddy with its headers; survived `--force-recreate` and `down`/`up`                         | PASS    |
+| 13  | Database persistence                           | `docker compose down` (no `-v`) → `up`: all rows still present                                                  | PASS    |
+| 14  | Backup job                                     | UTC-stamped `.sql.gz`, no `.part` leftovers, retention removed a 20-day-old dump                                | PASS    |
+| 15  | **Restore rehearsal**                          | restored into a temporary database: row counts identical, schema complete, exclusion constraint still enforcing | PASS    |
+| 16  | Server-authoritative pricing                   | a client-supplied `total_price` → 400; the server computed 225,00 / 300 min / pickup 15:00                      | PASS    |
+| 17  | Hostinger VPS, hardening, firewall             | needs the server                                                                                                | NOT RUN |
+| 18  | DNS cutover + public Let's Encrypt certificate | needs DNS; validated locally with Caddy's internal CA                                                           | NOT RUN |
+| 19  | Auth0 browser login + admin UI smoke test      | needs the real domain and tenant access                                                                         | NOT RUN |
+| 20  | Authenticated gallery upload through the UI    | needs an Auth0 token; the endpoint itself answers 401 without one                                               | NOT RUN |
+
+Checks 1–16 were executed on 2026-10-03 on a local Docker host (Docker 29.8.1, Compose
+v5.5.1, `DOMAIN=localhost`, Caddy's internal CA) against the **unchanged** stack from
+`deploy/`. Repeat them on the Hostinger VPS: the same commands, and they are the acceptance
+test there.
+
+Two real defects surfaced and were fixed:
+
+1. **The API image did not start** (`ERR_MODULE_NOT_FOUND: Cannot find package 'zod'
+imported from /repo/packages/shared/src/booking.ts`). `@autowascenter/shared` is a
+   `file:` dependency, so Node resolves its imports from the link's real path, which never
+   reaches `apps/api/node_modules`. `deploy/docker/api.Dockerfile` now installs
+   `packages/shared`'s own dependencies. The same gap existed in the **development**
+   instructions (it only worked because `packages/shared/node_modules` happened to exist
+   locally), so `apps/api/README.md` and `docs/SELF-HOSTED-ARCHITECTURE.md` now mention it.
+2. Two commands in `docs/BACKUP-RESTORE.md` could not work as written: `$POSTGRES_USER`
+   is not in the shell (Compose only uses `deploy/.env` for its own interpolation), and
+   PostgreSQL 18 writes a `\unrestrict` line after the dump's end marker, so the
+   documented `tail -3` check missed it. Both are corrected.
 
 **Testing before DNS exists.** The real domain cannot get a certificate yet (ACME HTTP-01
 needs public DNS pointing at the server), so validate with `DOMAIN=localhost` in

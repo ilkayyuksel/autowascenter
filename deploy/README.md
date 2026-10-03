@@ -3,12 +3,12 @@
 Production stack for Autowascenter: the web app, the API, PostgreSQL, Caddy and a backup
 job. Everything in this directory is infrastructure; the application itself is unchanged.
 
-> **Verification status.** The configuration is validated (`docker compose config`, and the
-> contract tests in `src/deploy-stack.test.ts`), the web and API builds and the production
-> web server were run outside Docker. The stack has **not** been started with a Docker
-> engine yet: the development machine of phase 8 had no running engine. The commands that
-> still need to be executed once are marked **[to verify]** and listed in
-> `docs/PRODUCTION-DEPLOYMENT.md`.
+> **Verification status.** The stack was built and started on a local Docker host on
+> 2026-10-03 (Docker 29.8.1, `DOMAIN=localhost`) and passed the full gate: migrations and
+> schema on real PostgreSQL 18.6, 12 integration tests including parallel bookings, routing
+> through Caddy, upload and database persistence, the backup job with retention, and the
+> restore rehearsal. Details and the remaining server-specific steps (Hostinger VPS, DNS,
+> the public certificate, the Auth0 browser flow) are in `docs/HOSTINGER-DEPLOYMENT.md`.
 
 ## Architecture
 

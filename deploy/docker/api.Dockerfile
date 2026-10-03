@@ -12,10 +12,17 @@ FROM node:22.18.0-alpine AS deps
 WORKDIR /repo
 
 # Production dependencies only (drizzle-kit, PGlite and TypeScript are dev dependencies).
-COPY packages/shared/package.json ./packages/shared/
+#
+# packages/shared gets its OWN node_modules. `@autowascenter/shared` is a `file:` dependency,
+# so npm links it and Node resolves its imports from the link's REAL path
+# (/repo/packages/shared/...), which never reaches /repo/apps/api/node_modules. Without this,
+# `import { z } from "zod"` inside packages/shared fails with ERR_MODULE_NOT_FOUND at startup.
+COPY packages/shared/package.json packages/shared/package-lock.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src
 COPY apps/api/package.json apps/api/package-lock.json ./apps/api/
-RUN cd apps/api && npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+RUN cd packages/shared && npm ci --omit=dev --no-audit --no-fund \
+    && cd ../../apps/api && npm ci --omit=dev --no-audit --no-fund \
+    && npm cache clean --force
 
 # ---------------------------------------------------------------------------------------
 FROM node:22.18.0-alpine AS runtime

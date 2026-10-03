@@ -7,7 +7,17 @@ variable names are described in `deploy/README.md`.
 (restore into a temporary database) before relying on these backups, and repeat it after
 every schema change.
 
-Run the commands from `deploy/`, where `.env` is.
+Run the commands from `deploy/`, where `.env` is, and **load the environment first**. The
+commands below use `$POSTGRES_USER`, `$POSTGRES_DB` and `$POSTGRES_PASSWORD`; Compose reads
+`deploy/.env` for its own interpolation but does **not** put those values in your shell:
+
+```sh
+cd /opt/autowascenter/deploy
+set -a; . ./.env; set +a
+echo "$POSTGRES_USER / $POSTGRES_DB"     # check: both filled in
+```
+
+(Without this, every `psql`/`createdb` call below fails with an empty user name.)
 
 ## What is backed up
 
@@ -69,11 +79,13 @@ zcat <file>.sql.gz | grep -E "^(CREATE TABLE|COPY) (public\.)?(bookings|services
 zcat <file>.sql.gz | wc -l
 ```
 
-An empty or truncated dump is recognisable by a missing `-- PostgreSQL database dump
-complete` at the end:
+A complete dump ends with the marker `-- PostgreSQL database dump complete`. Grep for it
+instead of looking at the last lines: PostgreSQL 18 writes an extra `\unrestrict …` line
+after the marker, so `tail -3` misses it.
 
 ```sh
-zcat <file>.sql.gz | tail -3
+zcat <file>.sql.gz | grep -c "PostgreSQL database dump complete"   # expect 1
+zcat <file>.sql.gz | tail -6                                       # marker + \unrestrict
 ```
 
 ## 4. Restore into a temporary database (the rehearsal)
@@ -180,7 +192,12 @@ Already applied migrations are skipped; only the missing ones run.
 
 ## Status of the rehearsal
 
-The restore procedure above has **not** been executed yet: the phase-8 development machine
-had no running Docker engine, so no container could be started. Step 4 is the first thing to
-do on the server, before the site goes live. `docs/PRODUCTION-DEPLOYMENT.md` lists it as a
-required step (16).
+The rehearsal (step 4) was executed on 2026-10-03 on a local Docker host and **passed**: a
+dump from the running backup job was copied out, inspected, restored into a temporary
+database, and the row counts matched the live database exactly (1 booking with 2 service
+lines, 4 services, 2 vehicle types, 8 pricing rows, settings, blocked period, gallery item).
+The restored database had the complete schema — 10 tables, 25 indexes, 8 triggers,
+`btree_gist` — and its exclusion constraint actively rejected an overlapping booking.
+
+Repeat it on the production server before the site goes live, and periodically afterwards:
+a backup is only proven on the machine that has to be restored.
