@@ -2,27 +2,28 @@
 
 Migratie van het Lovable/Supabase-project naar een self-hosted platform met Docker Compose.
 
-| Fase                                               | Status                                                                         |
-| -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Fase 0: beveiligen + baseline                      | **Afgerond** (zie _Completed_)                                                 |
-| Fase 0.5: reproduceerbare baseline                 | **Afgerond** (zie _Baseline v1_)                                               |
-| Fase 1: Supabase database-inventaris               | **Afgerond** (`docs/DATABASE-INVENTORY.md`, `docs/DATABASE-MIGRATION-MAP.md`)  |
-| Fase 2: PostgreSQL-databaselaag (Drizzle)          | **Afgerond** (zie _Phase 2: database layer_)                                   |
-| Fase 3: API-skelet + publieke reads (Fastify)      | **Afgerond** (zie _Phase 3: public read API_)                                  |
-| Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                   |
-| Fase 5: Auth0 authentication + authorization       | **Afgerond** (zie _Phase 5_); ⚠ admin-datapagina's werken pas weer na Fase 6   |
-| Fase 6A: admin-API read-side                       | **Afgerond** (zie _Phase 6A_); frontend nog niet aangesloten                   |
-| Fase 6B: admin-API write-side                      | **Afgerond** (zie _Phase 6B_); frontend nog niet aangesloten                   |
-| Fase 6C: gallery storage (self-hosted)             | **Afgerond** (zie _Phase 6C_); frontend en bestaande bestanden niet gemigreerd |
-| Fase 6D-1: admin-frontend READ-migratie            | **Afgerond** (zie _Phase 6D-1_); admin-writes nog via Supabase                 |
-| Fase 6D-2: admin-frontend WRITE-migratie           | **Afgerond** (zie _Phase 6D-2_); admin volledig via de eigen API               |
-| Fase 7A: publieke frontend READ-migratie           | **Afgerond** (zie _Phase 7A_); booking-submit nog via Supabase                 |
-| Fase 7B: publieke booking-WRITE-migratie           | **Afgerond** (zie _Phase 7B_); geen runtime-Supabase meer                      |
-| Fase 7C: Supabase/Lovable/Cloudflare-cleanup       | **Afgerond** (zie _Phase 7C_); self-hosted Node-build                          |
-| Fase 8: production Docker Compose                  | **Afgerond** (zie _Phase 8_); runtime geverifieerd in Fase 9                   |
-| Fase 9: productie-deployment + Hostinger DNS/HTTPS | **Gedeeltelijk** (zie _Phase 9_): runtime-gate geslaagd, server/DNS nog open   |
-| Volgende fase                                      | **Gate herhalen op de Hostinger VPS**, daarna DNS, HTTPS en Auth0              |
-| Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
+| Fase                                               | Status                                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Fase 0: beveiligen + baseline                      | **Afgerond** (zie _Completed_)                                                         |
+| Fase 0.5: reproduceerbare baseline                 | **Afgerond** (zie _Baseline v1_)                                                       |
+| Fase 1: Supabase database-inventaris               | **Afgerond** (`docs/DATABASE-INVENTORY.md`, `docs/DATABASE-MIGRATION-MAP.md`)          |
+| Fase 2: PostgreSQL-databaselaag (Drizzle)          | **Afgerond** (zie _Phase 2: database layer_)                                           |
+| Fase 3: API-skelet + publieke reads (Fastify)      | **Afgerond** (zie _Phase 3: public read API_)                                          |
+| Fase 4: booking, pricing, availability server-side | **Afgerond** (zie _Phase 4_)                                                           |
+| Fase 5: Auth0 authentication + authorization       | **Afgerond** (zie _Phase 5_); ⚠ admin-datapagina's werken pas weer na Fase 6           |
+| Fase 6A: admin-API read-side                       | **Afgerond** (zie _Phase 6A_); frontend nog niet aangesloten                           |
+| Fase 6B: admin-API write-side                      | **Afgerond** (zie _Phase 6B_); frontend nog niet aangesloten                           |
+| Fase 6C: gallery storage (self-hosted)             | **Afgerond** (zie _Phase 6C_); frontend en bestaande bestanden niet gemigreerd         |
+| Fase 6D-1: admin-frontend READ-migratie            | **Afgerond** (zie _Phase 6D-1_); admin-writes nog via Supabase                         |
+| Fase 6D-2: admin-frontend WRITE-migratie           | **Afgerond** (zie _Phase 6D-2_); admin volledig via de eigen API                       |
+| Fase 7A: publieke frontend READ-migratie           | **Afgerond** (zie _Phase 7A_); booking-submit nog via Supabase                         |
+| Fase 7B: publieke booking-WRITE-migratie           | **Afgerond** (zie _Phase 7B_); geen runtime-Supabase meer                              |
+| Fase 7C: Supabase/Lovable/Cloudflare-cleanup       | **Afgerond** (zie _Phase 7C_); self-hosted Node-build                                  |
+| Fase 8: production Docker Compose                  | **Afgerond** (zie _Phase 8_); runtime geverifieerd in Fase 9                           |
+| Fase 9: productie-deployment + Hostinger DNS/HTTPS | **Gedeeltelijk** (zie _Phase 9_): runtime-gate geslaagd, server/DNS nog open           |
+| Admin end-to-end test vóór deployment              | **Gedeeltelijk** (`docs/ADMIN-E2E-TEST-REPORT.md`): alles behalve de Auth0-browserflow |
+| Volgende fase                                      | **Gate herhalen op de Hostinger VPS**, daarna DNS, HTTPS en Auth0                      |
+| Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)                      |
 
 ## Phase 2: database layer
 
