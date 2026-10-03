@@ -20,7 +20,8 @@ Migratie van het Lovable/Supabase-project naar een self-hosted platform met Dock
 | Fase 7B: publieke booking-WRITE-migratie           | **Afgerond** (zie _Phase 7B_); geen runtime-Supabase meer                      |
 | Fase 7C: Supabase/Lovable/Cloudflare-cleanup       | **Afgerond** (zie _Phase 7C_); self-hosted Node-build                          |
 | Fase 8: production Docker Compose                  | **Afgerond** (zie _Phase 8_); runtime-verificatie op de server nog te doen     |
-| Volgende fase                                      | **Production server deployment en Hostinger DNS/HTTPS** (9)                    |
+| Fase 9: productie-deployment + Hostinger DNS/HTTPS | **BLOCKED** (zie _Phase 9_): geen server- en Docker-toegang; runbook klaar     |
+| Volgende fase                                      | **Uitvoeren van de deployment-gate op een Docker-host**, daarna DNS/HTTPS      |
 | Latere fases                                       | Niet gestart (publieke frontendmigratie, data, Docker, productie)              |
 
 ## Phase 2: database layer
@@ -443,6 +444,60 @@ Details: `deploy/README.md`, `docs/PRODUCTION-DEPLOYMENT.md`, `docs/BACKUP-RESTO
   een echte productiedatabase of echte uploads.
 
 **Next phase: "Production server deployment and Hostinger DNS/HTTPS"**
+
+## Phase 9 — Production server deployment en Hostinger DNS/HTTPS
+
+**Status: BLOCKED — niet uitgevoerd**
+
+Runbook: `docs/HOSTINGER-DEPLOYMENT.md`; de stack-stappen zelf staan in
+`docs/PRODUCTION-DEPLOYMENT.md`.
+
+- **Waarom geblokkeerd**: deze fase vraagt een echte server, en die is hier niet
+  beschikbaar.
+  - Geen Hostinger-server: er is geen SSH-sleutel, geen IP en geen credential op deze
+    machine, en geen toegang tot hPanel of het Auth0-dashboard. Ik heb niets geprobeerd te
+    benaderen.
+  - Geen lokale Docker-engine: `com.docker.service` staat uit en vereist
+    Administrator-rechten die deze sessie niet heeft. Ook een lokale PostgreSQL ontbreekt.
+  - Daarom is **geen enkele** runtimestap uitgevoerd: image build, `compose up`, migraties
+    op een echte server, de echte-PostgreSQL-tests, de concurrencytest, persistentie, de
+    backupjob, de restore-repetitie, de Caddy/HTTPS-controle en de smoke test. Alle
+    DNS-records zijn ongewijzigd.
+- **Wel gedaan in deze fase**:
+  - De drie vastgepinde image-tags bestaan echt (`postgres:18.6-alpine`,
+    `caddy:2.11.4-alpine`, `node:22.18.0-alpine`; gecontroleerd via Docker Hub op
+    2026-10-03). Dat was een reëel risico: een niet-bestaande tag breekt de eerste
+    deploystap.
+  - De Hostinger-feiten zijn opgezocht in de actuele officiële documentatie: het
+    Docker-VPS-template levert Ubuntu 24.04 met docker-ce en docker-compose, SSH als root
+    op poort 22, en de firewall zit in hPanel onder VPS → Security → Firewall. **Docker
+    draait alleen op een VPS, niet op shared hosting** (die SSH loopt op poort 65002).
+  - `docs/HOSTINGER-DEPLOYMENT.md` toegevoegd: de omgevingseisen met een
+    inventarisatietabel, server hardening, de dubbele firewalllaag (hPanel én ufw, met de
+    waarschuwing dat gepubliceerde containerpoorten ufw omzeilen), de DNS-inventaris vóór
+    wijzigen, de doelrecords, de IPv6- en CAA-valkuilen, de gate van 16 checks die moet
+    slagen vóór de cutover, de cutover zelf, de HTTPS-verificatie, het moment voor HSTS,
+    de smoke test, de operationele commando's, rollback en een tabel eenmalig versus per
+    deployment.
+  - Een consistentie-eis vastgelegd die eerder niet expliciet was: `SITE.domain` in
+    `src/lib/site.ts` moet gelijk zijn aan `DOMAIN` in `deploy/.env`, anders wijst de
+    absolute `og:image`-URL naar een host die hem niet serveert. `PUBLIC_UPLOAD_URL` wordt
+    bovendien in `gallery_items.image_url` opgeslagen, dus die moet kloppen vóór de eerste
+    productie-upload.
+  - Testen vóór DNS is uitgewerkt: `DOMAIN=localhost` plus een SSH-tunnel, omdat een
+    certificaat voor het echte domein pas kan nadat DNS naar de server wijst. De
+    Auth0-browserflow kan daardoor pas ná de cutover, dus de Dashboard-URL's worden ervoor
+    al gezet.
+  - `docs/PRODUCTION-DEPLOYMENT.md` en `deploy/README.md` verwijzen nu naar de runbook en
+    markeren wat eenmalig is en wat bij elke deployment hoort.
+- **Niet gewijzigd**: geen business logic, pricing, schema, API-contracten, Auth0-model of
+  frontendfunctionaliteit. De wijziging in deze fase is uitsluitend documentatie.
+- **Tests**: ongewijzigd ten opzichte van Fase 8 — root 201 geslaagd, `apps/api` 236
+  (235 geslaagd, 1 overgeslagen omdat `TEST_DATABASE_URL` ontbreekt).
+
+**Volgende stap**: de gate in `docs/HOSTINGER-DEPLOYMENT.md` sectie 7 uitvoeren op een
+Linux Docker-host (of lokaal zodra de Docker-engine draait). Pas als die volledig slaagt,
+mag de DNS om.
 
 ## Current architecture
 

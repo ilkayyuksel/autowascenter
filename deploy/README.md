@@ -179,7 +179,12 @@ disk, and there are no application log files inside the containers.
 docker compose logs -f api        # follow
 docker compose logs --since 1h    # everything from the last hour
 docker compose ps                 # state + health
+df -h /                           # disk on the host
+docker system df                  # space used by images, volumes and build cache
 ```
+
+A fuller operations reference (including the Hostinger firewall and DNS) is in
+`docs/HOSTINGER-DEPLOYMENT.md`, section 12.
 
 ## Restart
 

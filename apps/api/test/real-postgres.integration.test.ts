@@ -1,6 +1,6 @@
 // Integration tests against a REAL PostgreSQL server (phase 8). The other suites use
 // PGlite, which is the same engine but has a single connection: it can prove the rules,
-// not真 parallelism, and it never exercises the production migration path.
+// not true parallelism, and it never exercises the production migration path.
 //
 // This suite therefore covers what PGlite cannot:
 //   * the production migration script's path (drizzle-orm migrator on an empty database),

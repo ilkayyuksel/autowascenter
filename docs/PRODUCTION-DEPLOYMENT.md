@@ -3,12 +3,16 @@
 Deploying the Docker stack from `deploy/` on a Linux server, in order. The stack itself is
 described in `deploy/README.md`; the architecture in `docs/SELF-HOSTED-ARCHITECTURE.md`.
 
-> **DNS and the live domain are the next phase.** The steps below work with the real domain
-> once it points at the server, and can be rehearsed beforehand with `DOMAIN=localhost`
-> (step 5). Nothing here changes DNS, the firewall or the Auth0 tenant automatically.
+> **Hostinger, hardening, firewall, DNS and HTTPS: see `docs/HOSTINGER-DEPLOYMENT.md`.**
+> That document wraps around this one (which server, how to harden it, which DNS records,
+> the cutover order and the HTTPS/HSTS checks). The steps here are the stack itself.
 >
-> **Not yet executed.** The phase-8 machine had no running Docker engine, so steps 6–16 have
-> not been run. They are the acceptance test of the deployment.
+> **Not yet executed.** No Docker engine was available on the development machine, so steps
+> 6–16 have **NOT RUN**. They are the acceptance test of the deployment and the gate before
+> the DNS cutover (`docs/HOSTINGER-DEPLOYMENT.md`, section 7).
+>
+> Steps 1–5 are **one-time** per server; steps 6–16 run on the first deployment and the
+> relevant ones again on every update (see `deploy/README.md`, _Update procedure_).
 
 ## 1. Server requirements
 
