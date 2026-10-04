@@ -4,6 +4,7 @@
 // src/routes/reservatie.tsx.
 
 import { z } from "zod";
+import { uuid } from "./ids.ts";
 import { SERVICE_KINDS } from "./constants.ts";
 
 const MAX_SERVICES = 50;
@@ -24,7 +25,7 @@ export const localTimeSchema = z
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Ongeldig tijdstip (verwacht UU:MM)");
 
 const serviceIdsSchema = z
-  .array(z.uuid())
+  .array(uuid())
   .min(1, "Kies minstens één dienst")
   .max(MAX_SERVICES)
   .refine((ids) => new Set(ids).size === ids.length, "Dezelfde dienst werd meermaals gekozen");
@@ -46,7 +47,7 @@ const optionalText = (max: number) => z.string().trim().max(max).optional();
 /** GET /api/availability query. */
 export const availabilityQuerySchema = z.strictObject({
   date: localDateSchema,
-  vehicle_type_id: z.uuid(),
+  vehicle_type_id: uuid(),
   service_ids: serviceIdsQuerySchema,
 });
 export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>;
@@ -58,7 +59,7 @@ export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>;
  */
 export const bookingRequestSchema = z
   .strictObject({
-    vehicle_type_id: z.uuid(),
+    vehicle_type_id: uuid(),
     service_ids: serviceIdsSchema,
     preferred_date: localDateSchema,
     preferred_time: localTimeSchema,
@@ -100,7 +101,7 @@ export const availabilitySlotSchema = z.object({
 export const availabilityResponseSchema = z.object({
   data: z.object({
     date: localDateSchema,
-    vehicle_type_id: z.uuid(),
+    vehicle_type_id: uuid(),
     total_duration_minutes: z.number().int().positive(),
     slots: z.array(availabilitySlotSchema),
   }),
@@ -122,7 +123,7 @@ export type Pricing = z.infer<typeof pricingSchema>;
 
 export const bookingCreatedResponseSchema = z.object({
   data: z.object({
-    id: z.uuid(),
+    id: uuid(),
     status: z.literal("nieuw"),
     preferred_date: localDateSchema,
     preferred_time: localTimeSchema,
@@ -133,7 +134,7 @@ export const bookingCreatedResponseSchema = z.object({
     total_duration_minutes: z.number().int().positive(),
     services: z.array(
       z.object({
-        service_id: z.uuid(),
+        service_id: uuid(),
         title: z.string(),
         kind: z.enum(SERVICE_KINDS),
         price: z.number(),

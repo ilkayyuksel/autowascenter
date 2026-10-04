@@ -4,6 +4,7 @@
 // are rejected with 400. Mapping to the current UI: docs/ADMIN-WRITE-MIGRATION-MAP.md.
 
 import { z } from "zod";
+import { uuid } from "./ids.ts";
 import {
   adminBlockedPeriod,
   adminBookingDetail,
@@ -31,7 +32,7 @@ const money = z
 
 const uuidList = (min: number, max: number) =>
   z
-    .array(z.uuid())
+    .array(uuid())
     .min(min)
     .max(max)
     .refine((ids) => new Set(ids).size === ids.length, "duplicate ids");
@@ -70,7 +71,7 @@ const imageUrl = z
  * start/end and cancel token are computed by the server (same engine as POST /api/bookings).
  */
 export const adminBookingCreate = z.strictObject({
-  vehicle_type_id: z.uuid(),
+  vehicle_type_id: uuid(),
   service_ids: uuidList(1, 50),
   preferred_date: calendarDate,
   preferred_time: localTime,
@@ -94,7 +95,7 @@ export const adminBookingPatch = z
     preferred_time: localTime.optional(),
     status: z.enum(statuses).optional(),
     notes: optionalText(1000),
-    vehicle_type_id: z.uuid().optional(),
+    vehicle_type_id: uuid().optional(),
     service_ids: uuidList(1, 50).optional(),
   })
   .refine(atLeastOneField, nonEmpty);
@@ -103,8 +104,8 @@ export const adminBookingPatch = z
 export const adminAvailabilityQuery = z
   .strictObject({
     date: calendarDate,
-    exclude_booking_id: z.uuid().optional(),
-    vehicle_type_id: z.uuid().optional(),
+    exclude_booking_id: uuid().optional(),
+    vehicle_type_id: uuid().optional(),
     service_ids: z
       .preprocess(
         (v) =>
@@ -210,7 +211,7 @@ export const pricingMatrixPut = z.strictObject({
   rows: z
     .array(
       z.strictObject({
-        service_id: z.uuid(),
+        service_id: uuid(),
         available: z.boolean(),
         price: money,
         duration_minutes: durationMinutes,
@@ -311,7 +312,7 @@ export const adminAvailabilityResponse = z.strictObject({
   data: z.strictObject({
     date: calendarDate,
     total_duration_minutes: z.number().int(),
-    exclude_booking_id: z.uuid().nullable(),
+    exclude_booking_id: uuid().nullable(),
     slots: z.array(
       z.strictObject({
         time: localTime,

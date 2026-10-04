@@ -113,16 +113,17 @@ that package from the link's **real** path (`packages/shared/...`), which never 
 `ERR_MODULE_NOT_FOUND: Cannot find package 'zod' imported from packages/shared/src/...`.
 The API image does the same (`deploy/docker/api.Dockerfile`).
 
-| Script                    | What it does                                                           |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `npm run dev`             | Development server with file watching                                  |
-| `npm start`               | Production-style start (`node src/server.ts`)                          |
-| `npm test`                | All tests (PGlite; no database needed)                                 |
-| `npm run typecheck`       | `tsc --noEmit`                                                         |
-| `npm run db:generate`     | New migration after changing `src/db/schema/*`                         |
-| `npm run db:check`        | drizzle-kit consistency check of `drizzle/`                            |
-| `npm run db:migrate`      | Apply migrations to `DATABASE_URL`                                     |
-| `npm run storage:orphans` | Read-only report: orphan upload files, missing files (deletes nothing) |
+| Script                    | What it does                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `npm run dev`             | Development server with file watching                                         |
+| `npm start`               | Production-style start (`node src/server.ts`)                                 |
+| `npm test`                | All tests (PGlite; no database needed)                                        |
+| `npm run typecheck`       | `tsc --noEmit`                                                                |
+| `npm run db:generate`     | New migration after changing `src/db/schema/*`                                |
+| `npm run db:check`        | drizzle-kit consistency check of `drizzle/`                                   |
+| `npm run db:migrate`      | Apply migrations to `DATABASE_URL`                                            |
+| `npm run db:seed`         | Import `data/autowascenter-production.json` (`-- --dry-run` to validate only) |
+| `npm run storage:orphans` | Read-only report: orphan upload files, missing files (deletes nothing)        |
 
 Most suites run on PGlite and need no database. Two integration suites need a real
 PostgreSQL server and skip themselves otherwise; see Testing.
@@ -217,6 +218,7 @@ other's rows.
 | `test/gallery-upload.test.ts`             | Upload JPEG/PNG/WebP, invalid MIME, fake magic bytes, too large (413), malformed multipart, 401/403, metadata + lists, generated names, traversal via file name, canonical public URL, rate limit, no storage → 503, DB failure → file removed, failed compensation logged, logs; public files with cache headers and no traversal/listing/staging; delete of managed/external/missing/shared files; orphan report (29 tests)                                                                                               |
 | `test/real-postgres.integration.test.ts`  | **Real PostgreSQL** (skipped without `TEST_DATABASE_URL`): the production migration path, schema objects as the server creates them, FK actions, TWO and TEN truly simultaneous bookings on separate connections, and rollback with forced mid-transaction failures (12 tests)                                                                                                                                                                                                                                              |
 | `test/admin-e2e.integration.test.ts`      | **Admin end to end on real PostgreSQL** (skipped without `TEST_DATABASE_URL`): the admin frontend's OWN modules (`src/lib/api/client.ts`, `admin-reads.ts`, `admin-writes.ts`) driven over real HTTP against the real app, with every result verified in SQL -- dashboard, bookings, availability, agenda, services, packages, vehicle types, pricing, blocked periods, settings, gallery uploads, public↔admin, authorization and integrity (36 tests). It does NOT cover the browser; see `docs/ADMIN-E2E-TEST-REPORT.md` |
+| `test/seed-production.test.ts`            | The production data import on a real PostgreSQL engine: the delivered export validates, a dry run changes nothing, the first run writes it exactly, a second run is idempotent, a broken reference rolls everything back, existing bookings/gallery/package contents/blocked periods survive, and the public API afterwards serves the catalogue, the slot list and a correctly priced real booking (16 tests). See `docs/PRODUCTION-DATA-IMPORT.md`                                                                        |
 | `test/admin-read.test.ts`                 | Admin read API: auth matrix (no/invalid token → 401, no permission → 403 even with role/e-mail claims, admin → 200) for all 9 endpoints; 400 for bad or unknown parameters; 404 for unknown bookings; strict contracts; data: dashboard aggregates, pagination, detail with snapshots and no `cancel_token`, multi-day agenda, catalogue, pricing matrix, settings (missing → 500), gallery (19 tests)                                                                                                                      |
 
 **PGlite** (`@electric-sql/pglite`, dev only) is the real PostgreSQL engine compiled to WASM, running in-process with `btree_gist`. `test/helpers/test-db.ts` applies all migrations from `drizzle/`, so the tests run against the production schema. No external database, Docker or production data is used. The unreachable-database tests are the only ones that use the `pg` driver; they need no running server.

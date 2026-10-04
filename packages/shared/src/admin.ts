@@ -4,6 +4,7 @@
 // Notably absent: bookings.cancel_token. Conventions: docs/ADMIN-API.md.
 
 import { z } from "zod";
+import { uuid } from "./ids.ts";
 
 const isoDateTime = z.iso.datetime({ offset: true });
 const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -32,7 +33,7 @@ export const paginationQuery = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
-export const idParams = z.strictObject({ id: z.uuid() });
+export const idParams = z.strictObject({ id: uuid() });
 
 export const MAX_AGENDA_DAYS = 62;
 
@@ -59,11 +60,11 @@ export const paginationMeta = z.strictObject({
 
 export const countMeta = z.strictObject({ total: z.number().int() });
 
-const vehicleTypeRef = z.strictObject({ id: z.uuid(), slug: z.string(), title: z.string() });
+const vehicleTypeRef = z.strictObject({ id: uuid(), slug: z.string(), title: z.string() });
 
 /** A booking as the admin sees it. Local date/time fields are Europe/Brussels. */
 export const adminBooking = z.strictObject({
-  id: z.uuid(),
+  id: uuid(),
   status: bookingStatus,
   customer_name: z.string(),
   customer_email: z.string(),
@@ -77,7 +78,7 @@ export const adminBooking = z.strictObject({
   /** LEGACY "brand model" text. */
   vehicle_info: z.string().nullable(),
   /** LEGACY: first service / joined titles (see booking_services for the real lines). */
-  service_id: z.uuid().nullable(),
+  service_id: uuid().nullable(),
   service_title: z.string().nullable(),
   preferred_date: localDate,
   preferred_time: localTime,
@@ -100,8 +101,8 @@ export const adminBooking = z.strictObject({
 });
 
 export const adminBookingLine = z.strictObject({
-  id: z.uuid(),
-  service_id: z.uuid().nullable(),
+  id: uuid(),
+  service_id: uuid().nullable(),
   service_title: z.string(),
   price: money,
   duration_minutes: z.number().int(),
@@ -110,7 +111,7 @@ export const adminBookingLine = z.strictObject({
 export const adminBookingDetail = adminBooking.extend({ services: z.array(adminBookingLine) });
 
 export const adminBlockedPeriod = z.strictObject({
-  id: z.uuid(),
+  id: uuid(),
   start_date: localDate,
   end_date: localDate,
   /** null = from 00:00 */
@@ -148,7 +149,7 @@ export const dashboardResponse = z.strictObject({
     }),
     today_bookings: z.array(
       z.strictObject({
-        id: z.uuid(),
+        id: uuid(),
         customer_name: z.string(),
         service_title: z.string().nullable(),
         preferred_time: localTime,
@@ -157,7 +158,7 @@ export const dashboardResponse = z.strictObject({
     ),
     next_booking: z
       .strictObject({
-        id: z.uuid(),
+        id: uuid(),
         customer_name: z.string(),
         service_title: z.string().nullable(),
         preferred_date: localDate,
@@ -186,7 +187,7 @@ export const agendaResponse = z.strictObject({
 });
 
 export const adminService = z.strictObject({
-  id: z.uuid(),
+  id: uuid(),
   title: z.string(),
   description: z.string().nullable(),
   kind: serviceKind,
@@ -201,7 +202,7 @@ export const adminService = z.strictObject({
   price: money.nullable(),
   duration_minutes: z.number().int().nullable(),
   /** For packages: ids of the contained services (package_services). */
-  included_service_ids: z.array(z.uuid()),
+  included_service_ids: z.array(uuid()),
   created_at: isoDateTime,
   updated_at: isoDateTime,
 });
@@ -209,7 +210,7 @@ export const adminService = z.strictObject({
 export const servicesResponse = z.strictObject({ data: z.array(adminService), meta: countMeta });
 
 export const adminVehicleType = z.strictObject({
-  id: z.uuid(),
+  id: uuid(),
   slug: z.string(),
   title: z.string(),
   description: z.string().nullable(),
@@ -222,8 +223,8 @@ export const adminVehicleType = z.strictObject({
   /** Pricing matrix rows (vehicle_type_services) for this type, by service title. */
   services: z.array(
     z.strictObject({
-      id: z.uuid(),
-      service_id: z.uuid(),
+      id: uuid(),
+      service_id: uuid(),
       title: z.string(),
       kind: serviceKind,
       service_active: z.boolean(),
@@ -247,7 +248,7 @@ export const blockedPeriodsResponse = z.strictObject({
 
 export const settingsResponse = z.strictObject({
   data: z.strictObject({
-    id: z.uuid(),
+    id: uuid(),
     opening_hour: localTime,
     closing_hour: localTime,
     slot_interval_minutes: z.number().int(),
@@ -262,7 +263,7 @@ export const settingsResponse = z.strictObject({
 });
 
 export const adminGalleryItem = z.strictObject({
-  id: z.uuid(),
+  id: uuid(),
   title: z.string().nullable(),
   description: z.string().nullable(),
   image_url: z.string(),

@@ -1,0 +1,858 @@
+{
+  "bedrijf": {
+    "naam": "Autowascenter",
+    "domein": "autowascenter.be",
+    "adres": "Raapstraat 34, 9100 Sint-Niklaas",
+    "gsm": "0470 56 40 63"
+  },
+  "site_settings": {
+    "opening_hour": "10:00",
+    "closing_hour": "21:00",
+    "slot_interval_minutes": 30,
+    "km_fee_eur_per_km": 1,
+    "free_km": 20,
+    "base_address": "Raapstraat 34, 9100 Sint-Niklaas",
+    "base_city": "Sint-Niklaas",
+    "notification_email": "info@autowascenter.be"
+  },
+  "vehicle_types": [
+    {
+      "id": "11111111-1111-1111-1111-111111111101",
+      "slug": "stadswagen",
+      "title": "Stadswagen",
+      "description": "Compacte stadswagens en kleine hatchbacks",
+      "icon": "car-side",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "11111111-1111-1111-1111-111111111102",
+      "slug": "suv-station",
+      "title": "SUV / Station / Middel",
+      "description": "SUV, 4x4, breaks en middenklasse wagens",
+      "icon": "suv",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "11111111-1111-1111-1111-111111111103",
+      "slug": "bestelwagen",
+      "title": "Bestelwagen",
+      "description": "Lichte bestelwagens en bedrijfswagens",
+      "icon": "van",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "11111111-1111-1111-1111-111111111104",
+      "slug": "pickup-multivan",
+      "title": "Pickup / Multivan",
+      "description": "Pickups en grote multivans",
+      "icon": "pickup",
+      "sort_order": 4,
+      "active": true
+    },
+    {
+      "id": "11111111-1111-1111-1111-111111111105",
+      "slug": "caravan-mobilehome",
+      "title": "Caravan / Mobilehome",
+      "description": "Caravans en mobilehomes",
+      "icon": "caravan",
+      "sort_order": 5,
+      "active": true
+    }
+  ],
+  "services": [
+    {
+      "id": "22222222-2222-2222-2222-222222222201",
+      "title": "Diep Clean Exterieur",
+      "description": "Grondige reiniging van de volledige carrosserie.",
+      "category": "Exterieur",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 1,
+      "icon": "spray-can",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222202",
+      "title": "Motorruimte reiniging",
+      "description": "Veilige reiniging en dressing van de motorruimte.",
+      "category": "Exterieur",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 2,
+      "icon": "spray-can",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222203",
+      "title": "1 Stap Polijsten",
+      "description": "Eénstaps machinaal polijsten voor frisse glans.",
+      "category": "Polijsten",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 3,
+      "icon": "sparkles",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222204",
+      "title": "2 Stap Polijsten",
+      "description": "Tweestaps polijsten voor diepere correctie.",
+      "category": "Polijsten",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 4,
+      "icon": "sparkles",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222205",
+      "title": "3 Stap Polijsten",
+      "description": "Driestaps lakcorrectie voor maximaal resultaat.",
+      "category": "Polijsten",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 5,
+      "icon": "sparkles",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222206",
+      "title": "3 Stap Polijsten & Coating",
+      "description": "Driestaps polish met keramische coating.",
+      "category": "Coating",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 6,
+      "icon": "shield",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222207",
+      "title": "2 Stap Polijsten & Coating",
+      "description": "Tweestaps polish met keramische coating.",
+      "category": "Coating",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 7,
+      "icon": "shield",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222208",
+      "title": "1 Stap Polijsten & Coating",
+      "description": "Eénstaps polish met keramische coating.",
+      "category": "Coating",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 8,
+      "icon": "shield",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222209",
+      "title": "Velgen Coating",
+      "description": "Beschermende coating op de velgen.",
+      "category": "Coating",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 9,
+      "icon": "shield",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222210",
+      "title": "Ruiten Coating",
+      "description": "Hydrofobe coating op de ruiten.",
+      "category": "Coating",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 10,
+      "icon": "shield",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222211",
+      "title": "Zetels Diepte Reiniging",
+      "description": "Diepe reiniging van stoffen of leren zetels.",
+      "category": "Interieur",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 11,
+      "icon": "car",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222212",
+      "title": "Auto Hemel Reiniging",
+      "description": "Reiniging van de hemelbekleding.",
+      "category": "Interieur",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 12,
+      "icon": "car",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222213",
+      "title": "Interieur Ontgeuring",
+      "description": "Ozonbehandeling tegen geurtjes.",
+      "category": "Interieur",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 13,
+      "icon": "car",
+      "badge": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222214",
+      "title": "Diep Clean Interieur + Exterieur",
+      "description": "Volledig pakket binnen en buiten.",
+      "category": "Pakketten",
+      "kind": "dienst",
+      "bookable": true,
+      "active": true,
+      "sort_order": 14,
+      "icon": "sparkles",
+      "badge": null
+    },
+    {
+      "id": "2ab138fb-12ef-415a-85db-356d60d737f1",
+      "title": "Basiswasbeurt interieur",
+      "description": null,
+      "category": "interieur",
+      "kind": "dienst",
+      "bookable": false,
+      "active": true,
+      "sort_order": 1,
+      "icon": "sparkles",
+      "badge": "geen afspraak nodig"
+    },
+    {
+      "id": "4529cf53-489f-43dc-87b2-695d2743f67b",
+      "title": "Basiswasbeurt exterieur",
+      "description": null,
+      "category": "Exterieur",
+      "kind": "dienst",
+      "bookable": false,
+      "active": true,
+      "sort_order": 1,
+      "icon": "sparkles",
+      "badge": "geen afspraak nodig"
+    }
+  ],
+  "prijzen_per_voertuigtype": [
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Diep Clean Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222201",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Motorruimte reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222202",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "1 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222203",
+      "available": true,
+      "price_eur_excl_btw": 199.95,
+      "duration_minutes": 240
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "2 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222204",
+      "available": true,
+      "price_eur_excl_btw": 349.95,
+      "duration_minutes": 360
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "3 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222205",
+      "available": true,
+      "price_eur_excl_btw": 499.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "3 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222206",
+      "available": true,
+      "price_eur_excl_btw": 649.95,
+      "duration_minutes": 1200
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "2 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222207",
+      "available": true,
+      "price_eur_excl_btw": 499.95,
+      "duration_minutes": 900
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "1 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222208",
+      "available": true,
+      "price_eur_excl_btw": 349.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Velgen Coating",
+      "service_id": "22222222-2222-2222-2222-222222222209",
+      "available": true,
+      "price_eur_excl_btw": 199.95,
+      "duration_minutes": 150
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Ruiten Coating",
+      "service_id": "22222222-2222-2222-2222-222222222210",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Zetels Diepte Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222211",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Auto Hemel Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222212",
+      "available": true,
+      "price_eur_excl_btw": 39.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Interieur Ontgeuring",
+      "service_id": "22222222-2222-2222-2222-222222222213",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Stadswagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111101",
+      "service": "Diep Clean Interieur + Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222214",
+      "available": true,
+      "price_eur_excl_btw": 129.95,
+      "duration_minutes": 270
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Diep Clean Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222201",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Motorruimte reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222202",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "1 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222203",
+      "available": true,
+      "price_eur_excl_btw": 199.95,
+      "duration_minutes": 300
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "2 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222204",
+      "available": true,
+      "price_eur_excl_btw": 349.95,
+      "duration_minutes": 360
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "3 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222205",
+      "available": true,
+      "price_eur_excl_btw": 499.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "3 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222206",
+      "available": true,
+      "price_eur_excl_btw": 649.95,
+      "duration_minutes": 1200
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "2 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222207",
+      "available": true,
+      "price_eur_excl_btw": 499.95,
+      "duration_minutes": 900
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "1 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222208",
+      "available": true,
+      "price_eur_excl_btw": 349.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Velgen Coating",
+      "service_id": "22222222-2222-2222-2222-222222222209",
+      "available": true,
+      "price_eur_excl_btw": 199.95,
+      "duration_minutes": 150
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Ruiten Coating",
+      "service_id": "22222222-2222-2222-2222-222222222210",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Zetels Diepte Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222211",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Auto Hemel Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222212",
+      "available": true,
+      "price_eur_excl_btw": 39.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Interieur Ontgeuring",
+      "service_id": "22222222-2222-2222-2222-222222222213",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "SUV / Station / Middel",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111102",
+      "service": "Diep Clean Interieur + Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222214",
+      "available": true,
+      "price_eur_excl_btw": 149.95,
+      "duration_minutes": 330
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Diep Clean Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222201",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Motorruimte reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222202",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 180
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "1 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222203",
+      "available": true,
+      "price_eur_excl_btw": 299.95,
+      "duration_minutes": 300
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "2 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222204",
+      "available": true,
+      "price_eur_excl_btw": 449.95,
+      "duration_minutes": 360
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "3 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222205",
+      "available": true,
+      "price_eur_excl_btw": 599.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "3 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222206",
+      "available": true,
+      "price_eur_excl_btw": 749.95,
+      "duration_minutes": 1200
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "2 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222207",
+      "available": true,
+      "price_eur_excl_btw": 599.95,
+      "duration_minutes": 900
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "1 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222208",
+      "available": true,
+      "price_eur_excl_btw": 449.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Velgen Coating",
+      "service_id": "22222222-2222-2222-2222-222222222209",
+      "available": true,
+      "price_eur_excl_btw": 199.95,
+      "duration_minutes": 150
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Ruiten Coating",
+      "service_id": "22222222-2222-2222-2222-222222222210",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Zetels Diepte Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222211",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Auto Hemel Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222212",
+      "available": true,
+      "price_eur_excl_btw": 39.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Interieur Ontgeuring",
+      "service_id": "22222222-2222-2222-2222-222222222213",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Bestelwagen",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111103",
+      "service": "Diep Clean Interieur + Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222214",
+      "available": true,
+      "price_eur_excl_btw": 179.95,
+      "duration_minutes": 330
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Diep Clean Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222201",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Motorruimte reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222202",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "1 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222203",
+      "available": true,
+      "price_eur_excl_btw": 249.95,
+      "duration_minutes": 300
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "2 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222204",
+      "available": true,
+      "price_eur_excl_btw": 349.95,
+      "duration_minutes": 360
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "3 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222205",
+      "available": true,
+      "price_eur_excl_btw": 499.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "3 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222206",
+      "available": true,
+      "price_eur_excl_btw": 649.95,
+      "duration_minutes": 1200
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "2 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222207",
+      "available": true,
+      "price_eur_excl_btw": 499.95,
+      "duration_minutes": 900
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "1 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222208",
+      "available": true,
+      "price_eur_excl_btw": 349.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Velgen Coating",
+      "service_id": "22222222-2222-2222-2222-222222222209",
+      "available": true,
+      "price_eur_excl_btw": 199.95,
+      "duration_minutes": 150
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Ruiten Coating",
+      "service_id": "22222222-2222-2222-2222-222222222210",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Zetels Diepte Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222211",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Auto Hemel Reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222212",
+      "available": true,
+      "price_eur_excl_btw": 39.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Interieur Ontgeuring",
+      "service_id": "22222222-2222-2222-2222-222222222213",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Pickup / Multivan",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111104",
+      "service": "Diep Clean Interieur + Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222214",
+      "available": true,
+      "price_eur_excl_btw": 169.95,
+      "duration_minutes": 330
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "Diep Clean Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222201",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 120
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "Motorruimte reiniging",
+      "service_id": "22222222-2222-2222-2222-222222222202",
+      "available": true,
+      "price_eur_excl_btw": 79.95,
+      "duration_minutes": 180
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "1 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222203",
+      "available": true,
+      "price_eur_excl_btw": 299.95,
+      "duration_minutes": 360
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "2 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222204",
+      "available": true,
+      "price_eur_excl_btw": 449.95,
+      "duration_minutes": 360
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "3 Stap Polijsten",
+      "service_id": "22222222-2222-2222-2222-222222222205",
+      "available": true,
+      "price_eur_excl_btw": 599.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "3 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222206",
+      "available": true,
+      "price_eur_excl_btw": 749.95,
+      "duration_minutes": 1200
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "2 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222207",
+      "available": true,
+      "price_eur_excl_btw": 599.95,
+      "duration_minutes": 900
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "1 Stap Polijsten & Coating",
+      "service_id": "22222222-2222-2222-2222-222222222208",
+      "available": true,
+      "price_eur_excl_btw": 449.95,
+      "duration_minutes": 600
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "Interieur Ontgeuring",
+      "service_id": "22222222-2222-2222-2222-222222222213",
+      "available": true,
+      "price_eur_excl_btw": 49.95,
+      "duration_minutes": 60
+    },
+    {
+      "vehicle_type": "Caravan / Mobilehome",
+      "vehicle_type_id": "11111111-1111-1111-1111-111111111105",
+      "service": "Diep Clean Interieur + Exterieur",
+      "service_id": "22222222-2222-2222-2222-222222222214",
+      "available": true,
+      "price_eur_excl_btw": 279.95,
+      "duration_minutes": 390
+    }
+  ],
+  "package_services": [],
+  "blocked_periods": [],
+  "gallery_items": []
+}

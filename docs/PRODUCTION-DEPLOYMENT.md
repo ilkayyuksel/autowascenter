@@ -159,6 +159,18 @@ Explicitly, never automatically:
 docker compose run --rm api node src/scripts/migrate.ts
 ```
 
+Then import the production catalogue (once; it is idempotent, so a repeat is harmless):
+
+```sh
+docker compose run --rm api npm run db:seed -- --dry-run
+docker compose run --rm api npm run db:seed
+```
+
+The script prints the target database, host and user -- never the password -- so you can
+check it is the production database before it writes. It upserts and never deletes, so
+bookings and gallery rows are safe. Details and the open data questions are in
+`docs/PRODUCTION-DATA-IMPORT.md`.
+
 The `psql` checks below use `$POSTGRES_USER` and `$POSTGRES_DB`. Those live in
 `deploy/.env`, not in your shell, so load them once per session:
 

@@ -5,6 +5,7 @@
 // validation of responses, src/lib/api/public-reads.ts).
 
 import { z } from "zod";
+import { uuid } from "./ids.ts";
 
 /** Every successful list response: `{ "data": [...] }`. */
 export const listResponse = <T extends z.ZodType>(item: T) => z.object({ data: z.array(item) });
@@ -14,14 +15,14 @@ export const limitQuery = z.object({
 });
 
 export const vehicleTypeParams = z.object({
-  vehicleTypeId: z.uuid(),
+  vehicleTypeId: uuid(),
 });
 
 export const serviceKind = z.enum(["dienst", "pakket", "extra"]);
 
 /** GET /api/services (union of ServicesPreview.tsx and routes/diensten.tsx). */
 export const publicService = z.object({
-  id: z.uuid(),
+  id: uuid(),
   title: z.string(),
   description: z.string().nullable(),
   category: z.string().nullable(),
@@ -38,7 +39,7 @@ export const publicService = z.object({
 
 /** GET /api/gallery (routes/galerij.tsx, RealisationsPreview.tsx). */
 export const publicGalleryItem = z.object({
-  id: z.uuid(),
+  id: uuid(),
   title: z.string().nullable(),
   description: z.string().nullable(),
   image_url: z.string(),
@@ -48,7 +49,7 @@ export const publicGalleryItem = z.object({
 
 /** GET /api/reviews (Testimonials.tsx). */
 export const publicReview = z.object({
-  id: z.uuid(),
+  id: uuid(),
   customer_name: z.string(),
   rating: z.number().int().min(1).max(5),
   content: z.string(),
@@ -56,7 +57,7 @@ export const publicReview = z.object({
 
 /** GET /api/vehicle-types (routes/reservatie.tsx step 1). */
 export const publicVehicleType = z.object({
-  id: z.uuid(),
+  id: uuid(),
   slug: z.string(),
   title: z.string(),
   description: z.string().nullable(),
@@ -69,8 +70,8 @@ export const publicVehicleType = z.object({
  */
 export const vehicleTypeServiceOption = z.object({
   /** vehicle_type_services.id: the frontend's selection key. */
-  id: z.uuid(),
-  service_id: z.uuid(),
+  id: uuid(),
+  service_id: uuid(),
   title: z.string(),
   description: z.string().nullable(),
   category: z.string().nullable(),
