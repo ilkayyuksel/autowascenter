@@ -59,6 +59,43 @@ characters and anything with trailing text are all still rejected. All 36 contra
 sites use it. A test pins this, including every delivered id, so it cannot be tightened
 back by accident.
 
+### The fix only takes effect once it is deployed
+
+The id schema is compiled into **both** sides, so an older deployment keeps failing even
+after the database is seeded correctly:
+
+- the **API** rejects the id in the URL or body, which is the 400 in the table above;
+- the **browser bundle** validates every response with the same shared contracts, so a
+  correct `200` from `/api/vehicle-types` is thrown away client-side and the page shows
+  "De voertuigtypes konden niet geladen worden." on a request that actually succeeded.
+
+Observed on https://autowascenter.be on 2026-10-04: `/api/vehicle-types`, `/api/services`
+and `/api/site-settings` all answered 200 with the seeded data, while
+`/api/vehicle-types/<id>/services` and `/api/availability` answered 400, and `/reservatie`
+showed the load error. The deployed bundle was confirmed to contain zod's RFC pattern
+(`[89abAB]` variant class), i.e. a build from before this fix.
+
+Deploy both images and recreate the containers:
+
+```sh
+cd /srv/autowascenter          # the repository on the server
+git pull
+cd deploy
+docker compose build api web   # the shared contracts are baked into both
+docker compose up -d api web
+```
+
+Then verify from a real browser, not only with curl -- the browser applies the response
+contracts that curl does not:
+
+```sh
+E2E_BASE_URL=https://autowascenter.be npm run test:e2e
+```
+
+The suite picks the vehicle type and service from the live catalogue, so it runs against
+production data as it is. Note that its booking test creates a real reservation, which you
+then cancel from the admin UI.
+
 ## DATA REVIEW REQUIRED
 
 None of these were changed. They are judgements about the business data, not bugs.

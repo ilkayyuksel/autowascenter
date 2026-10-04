@@ -128,6 +128,9 @@ async function observe(viewport = { width: 1280, height: 900 }): Promise<Observe
   return { page, consoleErrors, pageErrors, requests, failed };
 }
 
+/** Escapes a catalogue title so it can be used inside a RegExp. */
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 function assertNoForbiddenRequests(requests: Requested[], where: string) {
   for (const { url, resourceType } of requests) {
     const patterns = resourceType === "image" ? FORBIDDEN_FOR_IMAGES_TOO : FORBIDDEN;
@@ -204,6 +207,50 @@ describe("browser: public site", { skip }, () => {
   });
 });
 
+describe("browser: the reservation page loads its catalogue", { skip }, () => {
+  test("REGRESSION: a successful API response is not rejected by the page itself", async () => {
+    // Production served 200 on /api/vehicle-types while the page showed
+    // "De voertuigtypes konden niet geladen worden.": the deployed bundle validated ids
+    // with zod's RFC-4122 uuid schema, and the real catalogue uses ids whose variant
+    // nibble is not 8/9/a/b. The request succeeding is not enough -- the rendered result
+    // has to show the catalogue. See docs/PRODUCTION-DATA-IMPORT.md.
+    const o = await observe();
+    const { page } = o;
+    try {
+      const statuses: number[] = [];
+      page.on("response", (r) => {
+        if (r.url().includes("/api/vehicle-types")) statuses.push(r.status());
+      });
+      await page.goto(`${BASE_URL}/reservatie`, { waitUntil: "networkidle" });
+      await page.waitForTimeout(1500);
+
+      assert.ok(statuses.length > 0, "the page must request the vehicle types");
+      assert.ok(
+        statuses.every((s) => s === 200),
+        `the API must answer 200, got ${statuses.join(", ")}`,
+      );
+
+      const body = await page.innerText("body");
+      assert.ok(
+        !/konden niet geladen worden/i.test(body),
+        "the page must not show a load error while the API answers 200",
+      );
+
+      // Every active vehicle type the API returns must be offered as a choice.
+      const offered = (await (await fetch(`${BASE_URL}/api/vehicle-types`)).json()) as {
+        data: { title: string }[];
+      };
+      assert.ok(offered.data.length > 0, "the catalogue must not be empty");
+      for (const vehicleType of offered.data) {
+        assert.ok(body.includes(vehicleType.title), `step 1 should offer "${vehicleType.title}"`);
+      }
+      assertClean(o, "/reservatie catalogue");
+    } finally {
+      await o.page.context().close();
+    }
+  });
+});
+
 describe("browser: admin route guard without a login", { skip }, () => {
   test("/admin never shows admin data and never receives an authorised API response", async () => {
     const o = await observe();
@@ -254,13 +301,29 @@ describe("browser: public booking flow (UI → API → PostgreSQL)", { skip }, (
     try {
       await page.goto(`${BASE_URL}/reservatie`, { waitUntil: "networkidle" });
 
-      // Step 1: vehicle type (loaded from GET /api/vehicle-types).
-      await page.getByRole("button", { name: /Personenwagen/ }).click();
+      // Step 1: the first vehicle type the server offers. Picked from the live catalogue
+      // instead of by name, so this suite also runs against production data.
+      const vehicleTypes = (await (await fetch(`${BASE_URL}/api/vehicle-types`)).json()) as {
+        data: { id: string; title: string }[];
+      };
+      const vehicleType = vehicleTypes.data[0]!;
+      await page
+        .getByRole("button", { name: new RegExp(escapeRegExp(vehicleType.title)) })
+        .first()
+        .click();
       await next();
 
-      // Step 2: one bookable service (an extra alone is not enough).
-      // Anchored: the package's description mentions this service too.
-      await page.getByRole("button", { name: /^Handwas buiten/ }).click();
+      // Step 2: the first bookable option for that vehicle type (an extra alone is not
+      // enough to continue), again straight from the server.
+      const options = (await (
+        await fetch(`${BASE_URL}/api/vehicle-types/${vehicleType.id}/services`)
+      ).json()) as { data: { title: string; kind: string }[] };
+      const service = options.data.find((s) => s.kind !== "extra");
+      assert.ok(service, "the catalogue must offer at least one bookable service");
+      await page
+        .getByRole("button", { name: new RegExp(`^${escapeRegExp(service.title)}`) })
+        .first()
+        .click();
       await next();
       await next(); // step 3: no extras
 

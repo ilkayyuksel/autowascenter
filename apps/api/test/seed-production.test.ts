@@ -13,7 +13,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, describe, test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
-import { isUuid, uuid } from "@autowascenter/shared";
+import { availabilityResponseSchema, isUuid, uuid } from "@autowascenter/shared";
+import {
+  listResponse,
+  publicService,
+  publicSiteSettingsResponse,
+  publicVehicleType,
+  vehicleTypeServiceOption,
+} from "@autowascenter/shared/public";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { createApp } from "../src/app.ts";
@@ -496,6 +503,40 @@ describe("production seed: business behaviour through the public API", () => {
     assert.equal(response.statusCode, 200, `${url} -> ${response.statusCode}`);
     return response.json() as { data: unknown };
   };
+
+  test("the responses satisfy the contracts the BROWSER validates with", async () => {
+    // REGRESSION: in production this was the actual failure. The API answered 200 with
+    // correct data, but the browser validates every response with these same shared
+    // contracts, and their id schema rejected the delivered ids. The page then showed
+    // "De voertuigtypes konden niet geladen worden." on a successful request. Validating
+    // the real responses here reproduces that at test level.
+    await seedDatabase(db, source);
+
+    const parsed = (
+      schema: { safeParse: (v: unknown) => { success: boolean } },
+      body: unknown,
+      what: string,
+    ) => {
+      const result = schema.safeParse(body);
+      assert.ok(result.success, `${what} does not satisfy the contract the browser applies`);
+    };
+
+    parsed(listResponse(publicService), await json("/api/services"), "/api/services");
+    parsed(listResponse(publicVehicleType), await json("/api/vehicle-types"), "/api/vehicle-types");
+    parsed(publicSiteSettingsResponse, await json("/api/site-settings"), "/api/site-settings");
+    parsed(
+      listResponse(vehicleTypeServiceOption),
+      await json(`/api/vehicle-types/${STADSWAGEN}/services`),
+      "/api/vehicle-types/:id/services",
+    );
+    parsed(
+      availabilityResponseSchema,
+      await json(
+        `/api/availability?date=2026-10-05&vehicle_type_id=${STADSWAGEN}&service_ids=${DIEP_CLEAN_EXTERIEUR}`,
+      ),
+      "/api/availability",
+    );
+  });
 
   test("the catalogue endpoints serve the seeded data", async () => {
     await seedDatabase(db, source);
