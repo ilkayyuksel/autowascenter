@@ -97,25 +97,56 @@ docker run --rm -v autowascenter_uploads_data:/data:ro -v "$PWD":/out alpine:3.2
   tar czf /out/uploads-$(date -u +%Y%m%dT%H%M%SZ).tar.gz -C /data .
 ```
 
+## Which Compose, and which `.env`
+
+**Docker Compose V2 is required**: `docker compose` (the plugin). The legacy standalone
+`docker-compose` (Python, 1.x) cannot read this stack -- it rejects the `name:` key with
+`'name' does not match any of the regexes: '^x-'`. Check which one you have:
+
+```sh
+docker compose version      # expect v2.x or later
+```
+
+**Run Compose from `deploy/`.** Compose reads `.env` from the directory of the compose
+file, so from the repository root it would read the root `.env` (the frontend's development
+values) and every server variable would silently become a blank string. From the root, pass
+both paths:
+
+```sh
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml config
+```
+
+Required variables are written as `${VAR:?...}` in the compose file, so a missing one is
+named and refuses to start instead of becoming an empty value. `docker compose config` is
+the quickest check -- but its output contains the database password in cleartext, so do not
+paste or pipe it anywhere.
+
 ## Environment variables
 
 Copy `.env.example` to `.env` and fill it in; `chmod 600 .env`. It is never committed
-(`.gitignore`) and never copied into an image (`.dockerignore`).
+(`.gitignore`) and never copied into an image (`.dockerignore`). `.env.example` marks every
+variable `[REQUIRED]` or `[OPTIONAL]` with its default, so it is usable on its own.
 
-| Variable                                                           | Where it is used                                              | Notes                                                                            |
-| ------------------------------------------------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `DOMAIN`                                                           | caddy, and the defaults for `CORS_ORIGIN`/`PUBLIC_UPLOAD_URL` | The canonical domain. `localhost` for a local test.                              |
-| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`                | postgres, api, backup                                         | **Secret.** The password is only in `.env`.                                      |
-| `DATABASE_URL`                                                     | api                                                           | Optional. Empty = derived from the `POSTGRES_*` values with host `postgres`.     |
-| `LOG_LEVEL`                                                        | api                                                           | Default `info` (JSON to stdout).                                                 |
-| `TRUST_PROXY`                                                      | api                                                           | `true` behind Caddy, so the per-IP rate limits see the real client IP.           |
-| `CORS_ORIGIN`                                                      | api                                                           | Default `https://$DOMAIN`. Never `*`.                                            |
-| `PUBLIC_UPLOAD_URL`                                                | api                                                           | Default `https://$DOMAIN/uploads`. Determines the stored image URLs.             |
-| `MAX_UPLOAD_BYTES`, `*_RATE_LIMIT_*`                               | api                                                           | Upload size and rate limits.                                                     |
-| `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `AUTH0_ISSUER`                   | api                                                           | Public values; token verification only, **no client secret**.                    |
-| `VITE_API_BASE_URL`                                                | web **build**                                                 | Empty = same origin. Not `/api`: the API already serves its routes under `/api`. |
-| `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE` | web **build**                                                 | **Public**: compiled into the browser bundle.                                    |
-| `BACKUP_RETENTION_DAYS`, `BACKUP_INTERVAL_SECONDS`                 | backup                                                        | Default 14 days, every 24 h.                                                     |
+| Variable                                           | Where it is used                                              | Req. | Notes                                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------- | ---- | -------------------------------------------------------------------------------- |
+| `DOMAIN`                                           | caddy, and the defaults for `CORS_ORIGIN`/`PUBLIC_UPLOAD_URL` | yes  | The canonical domain. `localhost` for a local test.                              |
+| `POSTGRES_DB`, `POSTGRES_USER`                     | postgres, api, backup                                         | yes  | Created on first start of an empty data volume.                                  |
+| `POSTGRES_PASSWORD`                                | postgres, api, backup                                         | yes  | **Secret.** Only in `.env`; `openssl rand -base64 32`.                           |
+| `DATABASE_URL`                                     | api                                                           | no   | **Secret.** Empty = derived from the `POSTGRES_*` values with host `postgres`.   |
+| `LOG_LEVEL`                                        | api                                                           | no   | Default `info` (JSON to stdout).                                                 |
+| `TRUST_PROXY`                                      | api                                                           | no   | Default `true` behind Caddy, so the rate limits see the real client IP.          |
+| `CORS_ORIGIN`                                      | api                                                           | no   | Default `https://$DOMAIN`. Never `*`.                                            |
+| `PUBLIC_UPLOAD_URL`                                | api                                                           | no   | Default `https://$DOMAIN/uploads`. Determines the stored image URLs.             |
+| `MAX_UPLOAD_BYTES`, `*_RATE_LIMIT_*`               | api                                                           | no   | Upload size and rate limits; defaults in `.env.example`.                         |
+| `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`                   | api                                                           | yes  | Public values; token verification only, **no client secret**.                    |
+| `AUTH0_ISSUER`                                     | api                                                           | no   | Default `https://$AUTH0_DOMAIN/`. Only for an Auth0 custom domain.               |
+| `VITE_API_BASE_URL`                                | web **build**                                                 | no   | Empty = same origin. Not `/api`: the API already serves its routes under `/api`. |
+| `VITE_AUTH0_DOMAIN`, `_CLIENT_ID`, `_AUDIENCE`     | web **build**                                                 | yes  | **Public**: compiled into the browser bundle.                                    |
+| `BACKUP_RETENTION_DAYS`, `BACKUP_INTERVAL_SECONDS` | backup                                                        | no   | Default 14 days, every 24 h.                                                     |
+
+`UPLOAD_DIR`, `HOST`, `PORT` and `NODE_ENV` are not configurable through `.env`: the compose
+file and the images fix them. `TZ` is not used anywhere; the API converts to
+Europe/Brussels in code.
 
 `VITE_*` values are build-time: after changing one, run `docker compose build web` and
 recreate the container. The web service receives no database credentials and no Auth0

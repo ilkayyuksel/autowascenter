@@ -89,6 +89,87 @@ describe("deploy stack: secrets stay out of the web image", () => {
     assert.match(ENV_EXAMPLE, /^VITE_API_BASE_URL=$/m);
   });
 
+  /**
+   * `.env.example` marks each variable with the `[REQUIRED]`/`[OPTIONAL]` comment above it.
+   * Returns that marker per variable name.
+   */
+  function envExampleMarkers(): Record<string, "REQUIRED" | "OPTIONAL"> {
+    const markers: Record<string, "REQUIRED" | "OPTIONAL"> = {};
+    let current: "REQUIRED" | "OPTIONAL" | null = null;
+    for (const line of ENV_EXAMPLE.split("\n")) {
+      const marker = /^#\s*\[(REQUIRED|OPTIONAL)\]/.exec(line);
+      if (marker) current = marker[1] as "REQUIRED" | "OPTIONAL";
+      const assignment = /^([A-Z][A-Z0-9_]*)=/.exec(line);
+      if (assignment && current) markers[assignment[1]!] = current;
+    }
+    return markers;
+  }
+
+  /** The compose file without comment lines, so documented examples are not scanned. */
+  const COMPOSE_CODE = COMPOSE.split("\n")
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+
+  test("every required variable fails loudly instead of becoming a blank string", () => {
+    // Compose substitutes an empty string for an unset variable, which used to start the
+    // stack with DOMAIN="", CORS_ORIGIN="https://" and an empty database password. The
+    // `${VAR:?...}` form makes Compose name every missing variable and refuse instead.
+    const required = [
+      "DOMAIN",
+      "POSTGRES_DB",
+      "POSTGRES_USER",
+      "POSTGRES_PASSWORD",
+      "AUTH0_DOMAIN",
+      "AUTH0_AUDIENCE",
+      "VITE_AUTH0_DOMAIN",
+      "VITE_AUTH0_CLIENT_ID",
+      "VITE_AUTH0_AUDIENCE",
+    ];
+    const markers = envExampleMarkers();
+    for (const name of required) {
+      assert.match(
+        COMPOSE_CODE,
+        new RegExp(`\\$\\{${name}:\\?[^}]+\\}`),
+        `${name} must be declared required in the compose file`,
+      );
+      assert.equal(markers[name], "REQUIRED", `${name} must be marked [REQUIRED] in .env.example`);
+    }
+    // Optional ones must NOT be required, or an empty value would block the stack.
+    for (const name of ["DATABASE_URL", "CORS_ORIGIN", "PUBLIC_UPLOAD_URL", "AUTH0_ISSUER"]) {
+      assert.doesNotMatch(
+        COMPOSE_CODE,
+        new RegExp(`\\$\\{${name}:\\?`),
+        `${name} must stay optional`,
+      );
+      assert.equal(markers[name], "OPTIONAL", `${name} must be marked [OPTIONAL]`);
+    }
+    // VITE_API_BASE_URL must stay optional AND empty: see the same-origin test above.
+    assert.equal(markers.VITE_API_BASE_URL, "OPTIONAL");
+  });
+
+  test("every variable the stack interpolates is documented in .env.example", () => {
+    const used = new Set(
+      [...COMPOSE_CODE.matchAll(/\$\{([A-Z][A-Z0-9_]*)[:?\-}]/g)].map((m) => m[1]!),
+    );
+    assert.ok(used.size >= 20, `expected the full set, found ${used.size}`);
+    for (const name of [...used].sort()) {
+      assert.match(ENV_EXAMPLE, new RegExp(`^${name}=`, "m"), `${name} missing from .env.example`);
+    }
+    // And nothing documented there is unused, so the file never grows dead settings.
+    const documented = [...ENV_EXAMPLE.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]!);
+    for (const name of documented) {
+      assert.ok(used.has(name), `${name} is in .env.example but used nowhere in the stack`);
+    }
+  });
+
+  test("the stack requires Compose V2 and says so where it breaks", () => {
+    // `name:` is Compose-Spec only; the legacy 1.x binary rejects it. Keep the fixed
+    // project name (it is what makes the volumes autowascenter_*), and document it.
+    assert.match(COMPOSE, /^name: autowascenter$/m);
+    assert.match(COMPOSE, /docker-compose/, "the legacy binary must be called out");
+    assert.match(COMPOSE, /deploy\/\.env/, "where the env file is read from");
+  });
+
   test("deploy/.env.example holds placeholders only, and .env is never built in", () => {
     assert.doesNotMatch(ENV_EXAMPLE, /eyJ[A-Za-z0-9_-]{10,}/, "no token-like value");
     assert.match(ENV_EXAMPLE, /^POSTGRES_PASSWORD=change-me/m);

@@ -60,12 +60,39 @@ openssl rand -base64 32          # use as POSTGRES_PASSWORD
 $EDITOR .env
 ```
 
-Fill in at least:
+Fill in every `[REQUIRED]` variable in `.env.example`:
 
 - `DOMAIN`
+- `POSTGRES_DB`, `POSTGRES_USER`
 - `POSTGRES_PASSWORD` (long and random; it only lives in this file)
 - `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` and the matching `VITE_AUTH0_DOMAIN`,
   `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE` (from `docs/AUTH0-SETUP.md`)
+
+Then check the result before starting anything:
+
+```sh
+docker compose config > /dev/null && echo "env config OK"
+```
+
+Every required variable is written as `${VAR:?...}` in the compose file, so a missing one is
+named in the error instead of silently becoming an empty string (which would give
+`DOMAIN=""`, `CORS_ORIGIN=https://` and an empty database password). Note that the full
+`docker compose config` output prints the database password in cleartext: do not paste it
+into a chat, a ticket or a log.
+
+**Run Compose from `deploy/`**, as above. Compose reads `.env` from the directory of the
+compose file, so running it from the repository root picks up the root `.env` (the
+frontend's development values) and every server variable becomes blank. From the root, be
+explicit:
+
+```sh
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml config
+```
+
+**Use `docker compose`, not `docker-compose`.** The legacy standalone 1.x binary cannot
+read this stack: it rejects the `name:` key with
+`'name' does not match any of the regexes: '^x-'`, and it looks for `.env` in the current
+directory. Verify with `docker compose version`.
 
 Leave `VITE_API_BASE_URL` **empty**: the browser then calls `/api/...` on the site's own
 origin, which Caddy forwards to the API. `CORS_ORIGIN`, `PUBLIC_UPLOAD_URL` and

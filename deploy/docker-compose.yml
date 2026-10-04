@@ -1,4 +1,5 @@
-# Production stack for Autowascenter. Run from this directory:
+# Production stack for Autowascenter. Run from THIS directory, so Compose reads
+# deploy/.env:
 #
 #   cp .env.example .env     # fill in; never committed
 #   docker compose build
@@ -12,6 +13,14 @@
 # /api/... on the site's own origin and Caddy forwards it.
 #
 # Starting the stack never runs migrations; see docs/PRODUCTION-DEPLOYMENT.md.
+#
+# Requires Docker Compose V2 (`docker compose`, the plugin). The legacy standalone
+# `docker-compose` (Python, 1.x) cannot read this file: it rejects the `name:` key below
+# and it looks for `.env` in the current directory instead of next to the compose file.
+# Check with `docker compose version`.
+#
+# Variables written as ${VAR:?...} are REQUIRED: Compose then names every missing one and
+# refuses to start, instead of silently substituting a blank string.
 name: autowascenter
 
 # Container logs go to stdout/stderr (the API logs JSON through Fastify). The json-file
@@ -38,9 +47,9 @@ services:
     image: postgres:18.6-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?required, see deploy/.env.example}
+      POSTGRES_USER: ${POSTGRES_USER:?required, see deploy/.env.example}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required, see deploy/.env.example}
       # Explicit, so the data directory does not depend on the image's default (which
       # changed in PostgreSQL 18). The volume is mounted one level up, at the directory the
       # image declares, so the data lives inside the volume either way.
@@ -78,8 +87,8 @@ services:
       # X-Forwarded-For; otherwise the per-IP rate limits would treat all visitors as one.
       TRUST_PROXY: ${TRUST_PROXY:-true}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://${DOMAIN}}
-      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
-      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:?required, see deploy/.env.example}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?required, see deploy/.env.example}
       AUTH0_ISSUER: ${AUTH0_ISSUER:-}
       UPLOAD_DIR: /app/uploads
       PUBLIC_UPLOAD_URL: ${PUBLIC_UPLOAD_URL:-https://${DOMAIN}/uploads}
@@ -126,9 +135,9 @@ services:
       args:
         # PUBLIC values, compiled into the browser bundle. Empty API base URL = same origin.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL-}
-        VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
-        VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
-        VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+        VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN:?required, see deploy/.env.example}
+        VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID:?required, see deploy/.env.example}
+        VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE:?required, see deploy/.env.example}
     image: autowascenter-web:local
     restart: unless-stopped
     environment:
@@ -168,7 +177,7 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      DOMAIN: ${DOMAIN}
+      DOMAIN: ${DOMAIN:?required, see deploy/.env.example}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Certificates and automation state must survive a restart, or Let's Encrypt rate
